@@ -77,15 +77,21 @@
             }
             else if (pic.t == 'h')
             {
-                ctx.save();
-                ctx.save();
-                ctx.transform(a, b, c, d, e, f);
-                ctx.beginPath();
-                ctx.arc(0, 0, pic.r, 0, 2 * Math.PI);
-                ctx.restore();
-                ctx.lineWidth = pic.w;
-                ctx.stroke();
-                ctx.restore();
+                if (pic.w == 0)
+                {
+                    pic.t = 'c';
+                    display(ctx, pic, a, b, c, d, e, f);
+                }
+                else
+                {
+                    ctx.save();
+                    ctx.transform(a, b, c, d, e, f);
+                    ctx.lineWidth = pic.w;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, pic.r, 0, 2 * Math.PI);
+                    ctx.stroke();
+                    ctx.restore();
+                }
             }
             else if (pic.t == 't')
             {
