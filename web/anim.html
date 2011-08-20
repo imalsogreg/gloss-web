@@ -46,7 +46,7 @@
 
                 if (!found)
                 {
-                    var value = "import Graphics.Gloss\n\npicture = rotate (60*t) (rectangleSolid 80 200)";
+                    var value = "import Graphics.Gloss\n\nanimation t = rotate (60*t) (rectangleSolid 80 200)";
                     editor.getSession().setValue(value);
                 }
 
