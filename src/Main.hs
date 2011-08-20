@@ -130,7 +130,6 @@ animateStream app = do
         t1 <- getCurrentTime
         t' <- readIORef tv
         let interval = t1 `diffUTCTime` t'
-        print interval
         when (interval < targetInterval) $
             threadDelay $ round $ 1000000 * (targetInterval - interval)
         t1 <- getCurrentTime
