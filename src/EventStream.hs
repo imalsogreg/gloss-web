@@ -1,0 +1,104 @@
+{-# LANGUAGE OverloadedStrings #-}
+
+{-|
+    A Snap adapter to the HTML5 Server-Sent Events API.  Push-mode and
+    pull-mode interfaces are both available.
+-}
+module EventStream (
+    ServerEvent(..),
+    eventStreamPull,
+    eventStreamReliable,
+    eventStreamUnreliable
+    ) where
+
+import Blaze.ByteString.Builder
+import Control.Monad.Trans
+import Control.Concurrent
+import Data.Enumerator.List (generateM)
+import Snap.Types
+
+import           Data.Text (Text)
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
+
+{-|
+    Type representing a communication over an event stream.  This can be an
+    actual event, a comment, a modification to the retry timer, or a special
+    "close" event indicating the server should close the connection.
+-}
+data ServerEvent
+    = ServerEvent {
+        eventName :: Maybe Text,
+        eventId   :: Maybe Text,
+        eventData :: Text
+        }
+    | CommentEvent {
+        eventComment :: Text
+        }
+    | RetryEvent {
+        eventRetry :: Int
+        }
+    | CloseEvent
+
+
+{-|
+    Wraps the text as a labeled field of an event stream.
+-}
+field l t = l `T.append` t `T.append` "\n"
+
+
+{-|
+    Converts a 'ServerEvent' to its wire representation as specified by the
+    @text/event-stream@ content type.
+-}
+eventToBuilder :: ServerEvent -> Maybe Builder
+eventToBuilder (CloseEvent)        = Nothing
+eventToBuilder (CommentEvent txt)  = Just $ fromByteString $ T.encodeUtf8 $
+    field ":" txt
+eventToBuilder (RetryEvent   n)    = Just $ fromByteString $ T.encodeUtf8 $
+    field "retry:" (T.pack (show n))
+eventToBuilder (ServerEvent n i d) = Just $ fromByteString $ T.encodeUtf8 $
+    T.concat $ name n $ evid i $ map (field "data:") (T.lines d) ++ ["\n"]
+  where
+    name Nothing  = id
+    name (Just n) = (field "event:" n :)
+    evid Nothing  = id
+    evid (Just i) = (field "id:"   i :)
+
+
+{-|
+    Sets up this request to act as an event stream, obtaining its events from
+    polling the given IO action.
+-}
+eventStreamPull       :: IO ServerEvent -> Snap ()
+eventStreamPull source = do
+    modifyResponse (setContentType "text/event-stream")
+    timeout <- getTimeoutAction
+    addToOutput (generateM (timeout 10 >> fmap eventToBuilder source))
+
+
+{-|
+    Sets up this request to act as an event stream, returning an action to send
+    events along the stream.  Events are treated as reliable: they will always
+    be sent.
+-}
+eventStreamReliable   :: Snap (ServerEvent -> IO ())
+eventStreamReliable = do
+    chan <- liftIO newChan
+    eventStreamPull (readChan chan)
+    return (writeChan chan)
+
+
+{-|
+    Sets up this request to act as an event stream, returning an action to send
+    events along the stream.  Events are treated as unreliable: only the most
+    recent will be sent, and older events will be dropped if events are
+    produced slower than they can be sent.  This may be appropriate for
+    user-interface related events where older information is no longer relevant.
+-}
+eventStreamUnreliable :: Snap (ServerEvent -> IO ())
+eventStreamUnreliable = do
+    var <- liftIO newEmptyMVar
+    eventStreamPull (takeMVar var)
+    return $ \val -> tryTakeMVar var >> putMVar var val
+

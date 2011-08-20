@@ -1,111 +1,72 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE MagicHash         #-}
-
 module Main where
 
 import Control.Applicative
+import Control.Concurrent
 import Control.Monad
 import Control.Monad.Trans
 import Data.Aeson
 import Data.IORef
-import Data.Typeable
-import GHC.Exts (unsafeCoerce#)
+import Data.Time
 import Graphics.Gloss
 import Snap.Http.Server
 import Snap.Types
 import Snap.Util.FileServe
-import System.FilePath
-import System.Random
 import Text.Templating.Heist
-import Text.Templating.Heist.TemplateDirectory
 import Text.XmlHtml
 
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as LB
 
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 
-import Data.Map (Map)
-import qualified Data.Map as M
-
-import Data.Vector (Vector)
-import qualified Data.Vector as V
-
-import qualified GHC        as GHC
-import qualified MonadUtils as GHC
-import qualified GHC.Paths  as GHC
-import qualified Bag        as GHC
-import qualified Outputable as GHC
-import qualified ErrUtils   as GHC
-import qualified HscTypes   as GHC
-import qualified DynFlags   as GHC
-
+import EventStream
+import ClientManager
+import Source
 import Instances
 
+
+data Anim = Anim {
+    startTime :: UTCTime,
+    animFunc  :: Float -> Picture
+    }
+
+
+data App = App {
+    appHeist      :: TemplateState Snap,
+    appAnimations :: ClientManager Anim
+    }
+
+
+main :: IO ()
 main = do
     Right heist <- loadTemplates "web" (emptyTemplateState "web")
+    animMgr     <- newClientManager
+    let app = App heist animMgr
     quickHttpServe $
-        route [ ("displayInBrowser", displayInBrowser heist) ]
+        route [ ("displayInBrowser", displayInBrowser app),
+                ("animateInBrowser", animateInBrowser app),
+                ("animateStream",    animateStream    app) ]
         <|> serveDirectory "web"
 
 
-displayInBrowser heist = do
-    src <- maybe mzero return =<< getParam "source"
+displayInBrowser :: App -> Snap ()
+displayInBrowser app = do
+    src <- maybe pass return =<< getParam "source"
     res <- liftIO $ getPicture src
     case res of
-        Left eref -> do errs <- liftIO $ readIORef eref
-                        displayErrors heist errs
-        Right pic -> displaySuccess heist pic
+        Left errs -> errors app errs
+        Right pic -> display app pic
 
 
-getPicture src = do
-    fn <- chooseFileName ".hs"
-    B.writeFile fn src
-    codeErrors <- newIORef []
-    GHC.defaultErrorHandler (addErrorTo codeErrors)
-        $ GHC.runGhc (Just GHC.libdir)
-        $ GHC.handleSourceError (handle codeErrors) $ do
-            dflags <- GHC.getSessionDynFlags
-            GHC.setSessionDynFlags $ dflags {
-                GHC.ghcMode = GHC.CompManager,
-                GHC.ghcLink = GHC.LinkInMemory,
-                GHC.hscTarget = GHC.HscInterpreted,
-                GHC.safeHaskell = GHC.Sf_Safe,
-                GHC.packageFlags = [GHC.TrustPackage "gloss"],
-                GHC.log_action = addErrorTo codeErrors
-                }
-            target <- GHC.guessTarget fn Nothing
-            GHC.setTargets [target]
-            r <- fmap GHC.succeeded (GHC.load GHC.LoadAllTargets)
-            case r of
-                True -> do
-                    mods <- GHC.getModuleGraph
-                    GHC.setContext [ GHC.ms_mod (head mods) ]
-                                   [ GHC.simpleImportDecl
-                                       (GHC.mkModuleName "Graphics.Gloss") ]
-                    v <- GHC.compileExpr "picture :: Picture"
-                    return (Right (unsafeCoerce# v :: Picture))
-                False -> return (Left codeErrors)
-  where
-    handle ref se = do
-        let errs    = GHC.bagToList (GHC.srcErrorMessages se)
-            nice e  = GHC.showSDoc (GHC.errMsgShortDoc e)
-            cleaned = map nice errs
-        GHC.liftIO $ modifyIORef ref (++ cleaned)
-        return (Left ref)
-    addErrorTo ref _ span style msg =
-        let niceError = GHC.showSDoc
-                $ GHC.withPprStyle style $ GHC.mkLocMessage span msg
-        in  modifyIORef ref (++ [ niceError ])
-
-
-displaySuccess :: TemplateState Snap -> Picture -> Snap ()
-displaySuccess heist pic = do
+display :: App -> Picture -> Snap ()
+display app pic = do
     Just (b, t) <- renderTemplate
-        (bindSplice "displayScript" (scrSplice pic) heist)
+        (bindSplice "displayScript" (scrSplice pic) (appHeist app))
         "display"
     modifyResponse (setContentType t)
     writeBuilder b
@@ -117,10 +78,38 @@ displaySuccess heist pic = do
         ]]
 
 
-displayErrors heist errs = do
+animateInBrowser :: App -> Snap ()
+animateInBrowser app = do
+    src <- maybe pass return =<< getParam "source"
+    res <- liftIO $ getAnimation src
+    case res of
+        Left errs -> errors app errs
+        Right pic -> animate app pic
+
+
+animate :: App -> (Float -> Picture) -> Snap ()
+animate app f = do
+    t <- liftIO getCurrentTime
+    let anim = Anim t f
+    k <- liftIO $ newClient (appAnimations app) anim
     Just (b, t) <- renderTemplate
-        (bindSplice "showErrors" (errSplice errs) heist)
-        "displayErrors"
+        (bindSplice "animateStreamScript" (scrSplice k) (appHeist app))
+        "animate"
+    modifyResponse (setContentType t)
+    writeBuilder b
+  where
+    scrSplice k = return [ Element "script" [("type", "text/javascript")] [
+        TextNode "eventURI = \'animateStream?key=",
+        TextNode $ T.pack $ show k,
+        TextNode "\';"
+        ]]
+
+
+errors :: App -> [String] -> Snap ()
+errors app errs = do
+    Just (b, t) <- renderTemplate
+        (bindSplice "showErrors" (errSplice errs) (appHeist app))
+        "errors"
     modifyResponse (setContentType t)
     writeBuilder b
   where
@@ -129,10 +118,25 @@ displayErrors heist errs = do
                 Element "pre" [] [TextNode (T.pack s) ]]) errs)]
 
 
-chooseFileName :: String -> IO String
-chooseFileName sfx = do
-    let chars = ['0'..'9'] ++ ['a'..'z']
-        len   = length chars
-    base <- replicateM 16 $ fmap (chars !!) $ randomRIO (0, len - 1)
-    return ("tmp" </> (base ++ sfx))
-
+animateStream :: App -> Snap ()
+animateStream app = do
+    k                  <- maybe pass return
+                      =<< getParam "key"
+    (Anim t0 f, touch) <- maybe pass return
+                      =<< liftIO (getClient (appAnimations app) (read (BC.unpack k)))
+    tv                 <- liftIO (newIORef =<< getCurrentTime)
+    eventStreamPull $ do
+        touch
+        t1 <- getCurrentTime
+        t' <- readIORef tv
+        let interval = t1 `diffUTCTime` t'
+        print interval
+        when (interval < targetInterval) $
+            threadDelay $ round $ 1000000 * (targetInterval - interval)
+        t1 <- getCurrentTime
+        writeIORef tv t1
+        let t = realToFrac (t1 `diffUTCTime` t0)
+        return $ ServerEvent Nothing Nothing $
+            T.decodeUtf8 $ B.concat $ LB.toChunks $ encode (f t)
+  where
+    targetInterval = 0.1
