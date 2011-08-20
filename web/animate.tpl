@@ -12,7 +12,8 @@
             var canvas = document.getElementById("screen");
             var eventSource = new EventSource(eventURI);
             eventSource.onmessage = function(event) {
-                displayInCanvas(canvas, JSON.parse(event.data));
+                var pic = JSON.parse(event.data);
+                displayInCanvas(canvas, pic);
             }
         }
         </script>

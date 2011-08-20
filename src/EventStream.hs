@@ -14,6 +14,7 @@ module EventStream (
 import Blaze.ByteString.Builder
 import Control.Monad.Trans
 import Control.Concurrent
+import Data.Monoid
 import Data.Enumerator.List (generateM)
 import Snap.Types
 
@@ -48,17 +49,24 @@ field l t = l `T.append` t `T.append` "\n"
 
 
 {-|
+    Appends a buffer flush to the end of a Builder.
+-}
+flushAfter b = b `mappend` flush
+
+
+{-|
     Converts a 'ServerEvent' to its wire representation as specified by the
     @text/event-stream@ content type.
 -}
 eventToBuilder :: ServerEvent -> Maybe Builder
 eventToBuilder (CloseEvent)        = Nothing
-eventToBuilder (CommentEvent txt)  = Just $ fromByteString $ T.encodeUtf8 $
-    field ":" txt
-eventToBuilder (RetryEvent   n)    = Just $ fromByteString $ T.encodeUtf8 $
-    field "retry:" (T.pack (show n))
-eventToBuilder (ServerEvent n i d) = Just $ fromByteString $ T.encodeUtf8 $
-    T.concat $ name n $ evid i $ map (field "data:") (T.lines d) ++ ["\n"]
+eventToBuilder (CommentEvent txt)  = Just $ flushAfter $ fromByteString $
+    T.encodeUtf8 (field ":" txt)
+eventToBuilder (RetryEvent   n)    = Just $ flushAfter $ fromByteString $
+    T.encodeUtf8 (field "retry:" (T.pack (show n)))
+eventToBuilder (ServerEvent n i d) = Just $ flushAfter $ fromByteString $
+    T.encodeUtf8 $ T.concat $ name n $ evid i $
+    map (field "data:") (T.lines d) ++ ["\n"]
   where
     name Nothing  = id
     name (Just n) = (field "event:" n :)
@@ -74,7 +82,8 @@ eventStreamPull       :: IO ServerEvent -> Snap ()
 eventStreamPull source = do
     modifyResponse (setContentType "text/event-stream")
     timeout <- getTimeoutAction
-    addToOutput (generateM (timeout 10 >> fmap eventToBuilder source))
+    modifyResponse $ setResponseBody $
+        generateM (timeout 10 >> fmap eventToBuilder source)
 
 
 {-|
