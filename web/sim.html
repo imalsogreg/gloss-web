@@ -48,10 +48,10 @@
                 if (!found)
                 {
                     var value = "import Graphics.Gloss\n\n"
-                        + "type State = (Float, Float)\n\n"
-                        + "initial = (0,0)\n\n"
-                        + "step _ t (x,y) = (x+t, y+t)\n\n"
-                        + "draw (x,y) = translate x y (circle 20)";
+                        + "data BallState = BallAt Float Float\n"
+                        + "initial = BallAt 100 0\n"
+                        + "step _ t (BallAt x v) = BallAt (x+v*t) (0.99*v-x*t)\n"
+                        + "draw     (BallAt x v) = translate x x (circle 20)";
                     editor.getSession().setValue(value);
                 }
 
