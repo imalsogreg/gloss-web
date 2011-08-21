@@ -28,17 +28,17 @@ import EventStream
 import ClientManager
 import Source
 import Instances
+import GlossAdapters
 
 
-data Anim = Anim {
-    startTime :: UTCTime,
-    animFunc  :: Float -> Picture
-    }
+type Anim = (UTCTime, Float -> Picture)
+type Sim = MVar (UTCTime, Simulation)
 
 
 data App = App {
-    appHeist      :: TemplateState Snap,
-    appAnimations :: ClientManager Anim
+    appHeist       :: TemplateState Snap,
+    appAnimations  :: ClientManager Anim,
+    appSimulations :: ClientManager Sim
     }
 
 
@@ -46,11 +46,14 @@ main :: IO ()
 main = do
     Right heist <- loadTemplates "web" (emptyTemplateState "web")
     animMgr     <- newClientManager
-    let app = App heist animMgr
+    simMgr      <- newClientManager
+    let app = App heist animMgr simMgr
     quickHttpServe $
-        route [ ("displayInBrowser", displayInBrowser app),
-                ("animateInBrowser", animateInBrowser app),
-                ("animateStream",    animateStream    app) ]
+        route [ ("displayInBrowser",  displayInBrowser  app),
+                ("animateInBrowser",  animateInBrowser  app),
+                ("animateStream",     animateStream     app),
+                ("simulateInBrowser", simulateInBrowser app),
+                ("simulateStream",    simulateStream    app) ]
         <|> serveDirectory "web"
 
 
@@ -90,10 +93,10 @@ animateInBrowser app = do
 animate :: App -> (Float -> Picture) -> Snap ()
 animate app f = do
     t <- liftIO getCurrentTime
-    let anim = Anim t f
+    let anim = (t, f)
     k <- liftIO $ newClient (appAnimations app) anim
     Just (b, t) <- renderTemplate
-        (bindSplice "animateStreamScript" (scrSplice k) (appHeist app))
+        (bindSplice "streamScript" (scrSplice k) (appHeist app))
         "animate"
     modifyResponse (setContentType t)
     writeBuilder b
@@ -105,24 +108,11 @@ animate app f = do
         ]]
 
 
-errors :: App -> [String] -> Snap ()
-errors app errs = do
-    Just (b, t) <- renderTemplate
-        (bindSplice "showErrors" (errSplice errs) (appHeist app))
-        "errors"
-    modifyResponse (setContentType t)
-    writeBuilder b
-  where
-    errSplice errs = return [Element "ul" []
-        (map (\s -> Element "li" [] [
-                Element "pre" [] [TextNode (T.pack s) ]]) errs)]
-
-
 animateStream :: App -> Snap ()
 animateStream app = do
     k                  <- maybe pass return
                       =<< getParam "key"
-    (Anim t0 f, touch) <- maybe pass return
+    ((t0, f), touch)  <- maybe pass return
                       =<< liftIO (getClient (appAnimations app) (read (BC.unpack k)))
     tv                 <- liftIO (newIORef =<< getCurrentTime)
     eventStreamPull $ do
@@ -139,3 +129,67 @@ animateStream app = do
             T.decodeUtf8 $ B.concat $ LB.toChunks $ encode (f t)
   where
     targetInterval = 0.1
+
+
+simulateInBrowser :: App -> Snap ()
+simulateInBrowser app = do
+    src <- maybe pass return =<< getParam "source"
+    res <- liftIO $ getSimulation src
+    case res of
+        Left errs -> errors app errs
+        Right pic -> simulate app pic
+
+
+simulate :: App -> Simulation -> Snap ()
+simulate app sim = do
+    t     <- liftIO getCurrentTime
+    simul <- liftIO $ newMVar (t, sim)
+    k     <- liftIO $ newClient (appSimulations app) simul
+    Just (b, t) <- renderTemplate
+        (bindSplice "streamScript" (scrSplice k) (appHeist app))
+        "animate"
+    modifyResponse (setContentType t)
+    writeBuilder b
+  where
+    scrSplice k = return [ Element "script" [("type", "text/javascript")] [
+        TextNode "eventURI = \'simulateStream?key=",
+        TextNode $ T.pack $ show k,
+        TextNode "\';"
+        ]]
+
+
+simulateStream :: App -> Snap ()
+simulateStream app = do
+    k                  <- maybe pass return
+                      =<< getParam "key"
+    (var, touch)       <- maybe pass return
+                      =<< liftIO (getClient (appSimulations app) (read (BC.unpack k)))
+    eventStreamPull $ modifyMVar var $ \(t0, sim) -> do
+        touch
+        t1 <- getCurrentTime
+        let interval = t1 `diffUTCTime` t0
+        when (interval < targetInterval) $
+            threadDelay $ round $ 1000000 * (targetInterval - interval)
+        t1 <- getCurrentTime
+        let t = realToFrac (t1 `diffUTCTime` t0)
+        let sim' = advanceSimulation t sim
+        let pic  = simulationToPicture sim'
+        return ((t1, sim'),
+            ServerEvent Nothing Nothing $
+                T.decodeUtf8 $ B.concat $ LB.toChunks $ encode pic)
+  where
+    targetInterval = 0.1
+
+
+errors :: App -> [String] -> Snap ()
+errors app errs = do
+    Just (b, t) <- renderTemplate
+        (bindSplice "showErrors" (errSplice errs) (appHeist app))
+        "errors"
+    modifyResponse (setContentType t)
+    writeBuilder b
+  where
+    errSplice errs = return [Element "ul" []
+        (map (\s -> Element "li" [] [
+                Element "pre" [] [TextNode (T.pack s) ]]) errs)]
+

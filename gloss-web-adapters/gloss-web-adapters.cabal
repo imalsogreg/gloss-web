@@ -1,0 +1,13 @@
+Name:                gloss-web-adapters
+Version:             0.1
+Synopsis:            Adapter types for loading gloss code into gloss-web
+License:             BSD3
+License-file:        LICENSE
+Author:              Chris Smith <cdsmith@gmail.com>
+Maintainer:          Chris Smith <cdsmith@gmail.com>
+Build-type:          Simple
+Cabal-version:       >=1.2
+
+Library
+  Exposed-modules:   GlossAdapters
+  Build-depends:     base, gloss

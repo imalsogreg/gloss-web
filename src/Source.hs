@@ -1,4 +1,4 @@
-{-# LANGUAGE MagicHash         #-}
+{-# LANGUAGE MagicHash                 #-}
 
 module Source where
 
@@ -22,20 +22,30 @@ import qualified ErrUtils   as GHC
 import qualified HscTypes   as GHC
 import qualified DynFlags   as GHC
 
+import GlossAdapters
+
 
 getPicture :: ByteString -> IO (Either [String] Picture)
 getPicture src = do
     r <- getValue "picture" "Picture" src
-    readLeft $ right (\x -> (unsafeCoerce# x :: Picture)) r
+    return (right (\x -> (unsafeCoerce# x :: Picture)) r)
 
 
 getAnimation :: ByteString -> IO (Either [String] (Float -> Picture))
 getAnimation src = do
     r <- getValue "animation" "Float -> Picture" src
-    readLeft $ right (\x -> (unsafeCoerce# x :: Float -> Picture)) r
+    return (right (\x -> (unsafeCoerce# x :: Float -> Picture)) r)
 
 
-getValue vname tname src = do
+getSimulation :: ByteString -> IO (Either [String] Simulation)
+getSimulation src = do
+    r <- getValue "Simulation initial step draw"
+                  "Simulation"
+                  src
+    return (right (\x -> (unsafeCoerce# x :: Simulation)) r)
+
+
+getValue vname tname src = readLeft =<< do
     fn <- chooseFileName ".hs"
     B.writeFile fn src
     codeErrors <- newIORef []
@@ -48,8 +58,10 @@ getValue vname tname src = do
                 GHC.ghcLink = GHC.LinkInMemory,
                 GHC.hscTarget = GHC.HscInterpreted,
                 GHC.safeHaskell = GHC.Sf_Safe,
-                GHC.packageFlags = [GHC.TrustPackage "gloss"],
-                GHC.log_action = addErrorTo codeErrors
+                GHC.packageFlags = [GHC.TrustPackage "gloss",
+                                    GHC.ExposePackage "gloss-web-adapters" ],
+                GHC.log_action = addErrorTo codeErrors,
+                GHC.importPaths = [ "src" ]
                 }
             target <- GHC.guessTarget fn Nothing
             GHC.setTargets [target]
@@ -59,9 +71,11 @@ getValue vname tname src = do
                     mods <- GHC.getModuleGraph
                     GHC.setContext [ GHC.ms_mod (head mods) ]
                                    [ GHC.simpleImportDecl
-                                       (GHC.mkModuleName "Graphics.Gloss") ]
+                                       (GHC.mkModuleName "Graphics.Gloss"),
+                                     GHC.simpleImportDecl
+                                       (GHC.mkModuleName "GlossAdapters") ]
                     v <- GHC.compileExpr $ vname ++ " :: " ++ tname
-                    return (Right (unsafeCoerce# v :: Picture))
+                    return (Right v)
                 False -> return (Left codeErrors)
   where
     handle ref se = do
@@ -87,6 +101,7 @@ chooseFileName sfx = do
 right :: (b -> c) -> Either a b -> Either a c
 right f (Right x) = Right (f x)
 right f (Left  x) = Left  x
+
 
 readLeft :: Either (IORef a) b -> IO (Either a b)
 readLeft (Right x) = return (Right x)

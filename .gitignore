@@ -1,4 +1,5 @@
 dist
+gloss-web-adapters/dist
 tmp/*.hs
 tmp/*.png
 log

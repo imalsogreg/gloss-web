@@ -29,6 +29,7 @@ Executable gloss-web
                      ghc >= 7.2,
                      ghc-paths,
                      gloss,
+                     gloss-web-adapters,
                      heist,
                      mtl,
                      random,

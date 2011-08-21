@@ -5,7 +5,7 @@
         <script type="text/javascript" src="excanvas.js"></script>
         <![endif]-->
         <script type="text/javascript" src="draw.js"></script>
-        <animateStreamScript/>
+        <streamScript/>
         <script type="text/javascript">
         function startAnim()
         {
