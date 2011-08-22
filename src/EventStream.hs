@@ -88,26 +88,11 @@ eventStreamPull source = do
 
 {-|
     Sets up this request to act as an event stream, returning an action to send
-    events along the stream.  Events are treated as reliable: they will always
-    be sent.
+    events along the stream.
 -}
-eventStreamReliable   :: Snap (ServerEvent -> IO ())
-eventStreamReliable = do
+eventStreamPush   :: Snap (ServerEvent -> IO ())
+eventStreamPush = do
     chan <- liftIO newChan
     eventStreamPull (readChan chan)
     return (writeChan chan)
-
-
-{-|
-    Sets up this request to act as an event stream, returning an action to send
-    events along the stream.  Events are treated as unreliable: only the most
-    recent will be sent, and older events will be dropped if events are
-    produced slower than they can be sent.  This may be appropriate for
-    user-interface related events where older information is no longer relevant.
--}
-eventStreamUnreliable :: Snap (ServerEvent -> IO ())
-eventStreamUnreliable = do
-    var <- liftIO newEmptyMVar
-    eventStreamPull (takeMVar var)
-    return $ \val -> tryTakeMVar var >> putMVar var val
 
