@@ -7,8 +7,7 @@
 module EventStream (
     ServerEvent(..),
     eventStreamPull,
-    eventStreamReliable,
-    eventStreamUnreliable
+    eventStreamPush
     ) where
 
 import Blaze.ByteString.Builder
