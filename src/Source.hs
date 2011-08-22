@@ -2,16 +2,23 @@
 
 module Source where
 
+import Control.Concurrent.MVar
 import Control.Monad
+import Crypto.Hash.MD5
 import Data.IORef
 import GHC.Exts (unsafeCoerce#)
 import Graphics.Gloss
 import System.FilePath
 import System.Random
 
-import Data.ByteString (ByteString)
+import           Data.Map (Map)
+import qualified Data.Map as M
+
+import           Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as LB
+import qualified Data.ByteString.Char8 as BC
+import qualified Data.ByteString.Base64 as B64
 
 import qualified GHC        as GHC
 import qualified MonadUtils as GHC
@@ -22,32 +29,58 @@ import qualified ErrUtils   as GHC
 import qualified HscTypes   as GHC
 import qualified DynFlags   as GHC
 
+import App
 import GlossAdapters
 
 
-getPicture :: ByteString -> IO (Either [String] Picture)
-getPicture src = do
-    r <- getValue "picture" "Picture" src
-    return (right (\x -> (unsafeCoerce# x :: Picture)) r)
+getPicture :: App -> ByteString -> IO (Either [String] Picture)
+getPicture app src = do
+    getCompileResult (appCompiledPictures app)
+                     "picture"
+                     "Picture"
+                     src
 
 
-getAnimation :: ByteString -> IO (Either [String] (Float -> Picture))
-getAnimation src = do
-    r <- getValue "animation" "Float -> Picture" src
-    return (right (\x -> (unsafeCoerce# x :: Float -> Picture)) r)
+getAnimation :: App -> ByteString -> IO (Either [String] (Float -> Picture))
+getAnimation app src = do
+    getCompileResult (appCompiledAnimations app)
+                     "animation"
+                     "Float -> Picture"
+                     src
 
 
-getSimulation :: ByteString -> IO (Either [String] Simulation)
-getSimulation src = do
-    r <- getValue "Simulation initial step draw"
-                  "Simulation"
-                  src
-    return (right (\x -> (unsafeCoerce# x :: Simulation)) r)
+getSimulation :: App -> ByteString -> IO (Either [String] Simulation)
+getSimulation app src = do
+    getCompileResult (appCompiledSimulations app)
+                     "Simulation initial step draw"
+                     "Simulation"
+                     src
 
 
-getValue vname tname src = readLeft =<< do
-    fn <- chooseFileName ".hs"
-    B.writeFile fn src
+base64FileName :: ByteString -> String
+base64FileName str = map slashToDash $ BC.unpack $ B64.encode str
+    where slashToDash '/' = '-'
+          slashToDash c   = c
+
+
+getCompileResult :: MVar (Map ByteString (Either [String] t))
+                 -> String
+                 -> String
+                 -> ByteString
+                 -> IO (Either [String] t)
+getCompileResult var vname tname src = modifyMVar var $ \m -> do
+        let digest = hash src
+        case M.lookup digest m of
+            Nothing  -> do
+                let fn = "tmp/" ++ base64FileName digest ++ ".hs"
+                B.writeFile fn src
+                res <- compile vname tname fn
+                return (M.insert digest res m, res)
+            Just res -> return (m, res)
+
+
+compile :: String -> String -> FilePath -> IO (Either [String] t)
+compile vname tname fn = fixupErrors =<< do
     codeErrors <- newIORef []
     GHC.defaultErrorHandler (addErrorTo codeErrors)
         $ GHC.runGhc (Just GHC.libdir)
@@ -60,8 +93,7 @@ getValue vname tname src = readLeft =<< do
                 GHC.safeHaskell = GHC.Sf_Safe,
                 GHC.packageFlags = [GHC.TrustPackage "gloss",
                                     GHC.ExposePackage "gloss-web-adapters" ],
-                GHC.log_action = addErrorTo codeErrors,
-                GHC.importPaths = [ "src" ]
+                GHC.log_action = addErrorTo codeErrors
                 }
             target <- GHC.guessTarget fn Nothing
             GHC.setTargets [target]
@@ -75,7 +107,7 @@ getValue vname tname src = readLeft =<< do
                                      GHC.simpleImportDecl
                                        (GHC.mkModuleName "GlossAdapters") ]
                     v <- GHC.compileExpr $ vname ++ " :: " ++ tname
-                    return (Right v)
+                    return (Right (unsafeCoerce# v))
                 False -> return (Left codeErrors)
   where
     handle ref se = do
@@ -88,22 +120,6 @@ getValue vname tname src = readLeft =<< do
         let niceError = GHC.showSDoc
                 $ GHC.withPprStyle style $ GHC.mkLocMessage span msg
         in  modifyIORef ref (++ [ niceError ])
-
-
-chooseFileName :: String -> IO String
-chooseFileName sfx = do
-    let chars = ['0'..'9'] ++ ['a'..'z']
-        len   = length chars
-    base <- replicateM 16 $ fmap (chars !!) $ randomRIO (0, len - 1)
-    return ("tmp" </> (base ++ sfx))
-
-
-right :: (b -> c) -> Either a b -> Either a c
-right f (Right x) = Right (f x)
-right f (Left  x) = Left  x
-
-
-readLeft :: Either (IORef a) b -> IO (Either a b)
-readLeft (Right x) = return (Right x)
-readLeft (Left  x) = fmap Left (readIORef x)
+    fixupErrors (Right x) = return (Right x)
+    fixupErrors (Left  x) = fmap Left (readIORef x)
 

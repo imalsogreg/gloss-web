@@ -24,6 +24,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 
+import App
 import EventStream
 import ClientManager
 import Source
@@ -31,23 +32,10 @@ import Instances
 import GlossAdapters
 
 
-type Anim = (UTCTime, Float -> Picture)
-type Sim = MVar (UTCTime, Simulation)
-
-
-data App = App {
-    appHeist       :: TemplateState Snap,
-    appAnimations  :: ClientManager Anim,
-    appSimulations :: ClientManager Sim
-    }
-
-
 main :: IO ()
 main = do
     Right heist <- loadTemplates "web" (emptyTemplateState "web")
-    animMgr     <- newClientManager
-    simMgr      <- newClientManager
-    let app = App heist animMgr simMgr
+    app         <- newApp heist
     quickHttpServe $
         route [ ("displayInBrowser",  displayInBrowser  app),
                 ("animateInBrowser",  animateInBrowser  app),
@@ -60,7 +48,7 @@ main = do
 displayInBrowser :: App -> Snap ()
 displayInBrowser app = do
     src <- maybe pass return =<< getParam "source"
-    res <- liftIO $ getPicture src
+    res <- liftIO $ getPicture app src
     case res of
         Left errs -> errors app errs
         Right pic -> display app pic
@@ -84,7 +72,7 @@ display app pic = do
 animateInBrowser :: App -> Snap ()
 animateInBrowser app = do
     src <- maybe pass return =<< getParam "source"
-    res <- liftIO $ getAnimation src
+    res <- liftIO $ getAnimation app src
     case res of
         Left errs -> errors app errs
         Right pic -> animate app pic
@@ -134,7 +122,7 @@ animateStream app = do
 simulateInBrowser :: App -> Snap ()
 simulateInBrowser app = do
     src <- maybe pass return =<< getParam "source"
-    res <- liftIO $ getSimulation src
+    res <- liftIO $ getSimulation app src
     case res of
         Left errs -> errors app errs
         Right pic -> simulate app pic
