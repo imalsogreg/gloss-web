@@ -1,5 +1,7 @@
 dist
 gloss-web-adapters/dist
 tmp/*.hs
+tmp/*.hi
+tmp/*.o
 tmp/*.png
 log

@@ -15,6 +15,7 @@ Cabal-version:       >=1.2
 Executable gloss-web
   Hs-source-dirs:    src
   Main-is:           Main.hs
+  Ghc-options:       -O2
   Build-depends:     aeson,
                      base,
                      base64-bytestring,
