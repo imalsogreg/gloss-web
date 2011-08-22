@@ -37,12 +37,100 @@ main = do
     Right heist <- loadTemplates "web" (emptyTemplateState "web")
     app         <- newApp heist
     quickHttpServe $
-        route [ ("displayInBrowser",  displayInBrowser  app),
+        route [ ("draw",              draw app),
+                ("anim",              anim app),
+                ("sim",               sim app),
+                ("displayInBrowser",  displayInBrowser  app),
                 ("animateInBrowser",  animateInBrowser  app),
                 ("animateStream",     animateStream     app),
                 ("simulateInBrowser", simulateInBrowser app),
                 ("simulateStream",    simulateStream    app) ]
         <|> serveDirectory "web"
+
+
+draw :: App -> Snap ()
+draw app = do
+    Just (b,t) <- renderTemplate
+        (addSplices (appHeist app))
+        "editor"
+    modifyResponse (setContentType t)
+    writeBuilder b
+  where
+    addSplices = bindSplices [
+        ("intro", introSplice),
+        ("action", actionSplice),
+        ("defaults", defaultsSplice)
+        ]
+    introSplice = return [
+        TextNode "Define a variable called ",
+        Element "code" [] [TextNode "picture"],
+        TextNode " describing your picture."
+        ]
+    actionSplice = return [ TextNode "displayInBrowser" ]
+    defaultsSplice = return [ Element "script" [("type", "text/javascript")] [
+        TextNode "var sourceCookie = 'displaySource';",
+        TextNode "var initialSource = 'import Graphics.Gloss\\n\\n",
+        TextNode "picture = circle 80';"
+        ]]
+
+
+anim :: App -> Snap ()
+anim app = do
+    Just (b,t) <- renderTemplate
+        (addSplices (appHeist app))
+        "editor"
+    modifyResponse (setContentType t)
+    writeBuilder b
+  where
+    addSplices = bindSplices [
+        ("intro", introSplice),
+        ("action", actionSplice),
+        ("defaults", defaultsSplice)
+        ]
+    introSplice = return [
+        TextNode "Define a variable called ",
+        Element "code" [] [TextNode "animation"],
+        TextNode " describing your animation."
+        ]
+    actionSplice = return [ TextNode "animateInBrowser" ]
+    defaultsSplice = return [ Element "script" [("type", "text/javascript")] [
+        TextNode "var sourceCookie = 'animateSource';",
+        TextNode "var initialSource = 'import Graphics.Gloss\\n\\n",
+        TextNode "animation t = rotate (60*t) (rectangleSolid 80 200)';"
+        ]]
+
+
+sim :: App -> Snap ()
+sim app = do
+    Just (b,t) <- renderTemplate
+        (addSplices (appHeist app))
+        "editor"
+    modifyResponse (setContentType t)
+    writeBuilder b
+  where
+    addSplices = bindSplices [
+        ("intro", introSplice),
+        ("action", actionSplice),
+        ("defaults", defaultsSplice)
+        ]
+    introSplice = return [
+        TextNode "Define variables called ",
+        Element "code" [] [TextNode "initial"],
+        TextNode ", ",
+        Element "code" [] [TextNode "step"],
+        TextNode ", and ",
+        Element "code" [] [TextNode "draw"],
+        TextNode " describing your simulation's initial state, step function, and appearance."
+        ]
+    actionSplice = return [ TextNode "simulateInBrowser" ]
+    defaultsSplice = return [ Element "script" [("type", "text/javascript")] [
+        TextNode "var sourceCookie = 'simulateSource';",
+        TextNode "var initialSource = 'import Graphics.Gloss\\n\\n",
+        TextNode "data BallState = BallAt Float Float\\n",
+        TextNode "initial = BallAt 100 0\\n",
+        TextNode "step _ t (BallAt x v) = BallAt (x+v*t) (0.99*v-x*t)\\n",
+        TextNode "draw     (BallAt x v) = translate x x (circle 20)';"
+        ]]
 
 
 displayInBrowser :: App -> Snap ()
