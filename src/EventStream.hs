@@ -42,9 +42,21 @@ data ServerEvent
 
 
 {-|
+    Create a builder from a text field.
+-}
+builder t = fromByteString (T.encodeUtf8 t)
+
+
+{-|
+    Newline as a Builder object.
+-}
+nl = builder "\n"
+
+
+{-|
     Wraps the text as a labeled field of an event stream.
 -}
-field l t = l `T.append` t `T.append` "\n"
+field l t = builder l `mappend` builder t `mappend` nl
 
 
 {-|
@@ -59,13 +71,10 @@ flushAfter b = b `mappend` flush
 -}
 eventToBuilder :: ServerEvent -> Maybe Builder
 eventToBuilder (CloseEvent)        = Nothing
-eventToBuilder (CommentEvent txt)  = Just $ flushAfter $ fromByteString $
-    T.encodeUtf8 (field ":" txt)
-eventToBuilder (RetryEvent   n)    = Just $ flushAfter $ fromByteString $
-    T.encodeUtf8 (field "retry:" (T.pack (show n)))
-eventToBuilder (ServerEvent n i d) = Just $ flushAfter $ fromByteString $
-    T.encodeUtf8 $ T.concat $ name n $ evid i $
-    map (field "data:") (T.lines d) ++ ["\n"]
+eventToBuilder (CommentEvent txt)  = Just $ flushAfter $ field ":" txt
+eventToBuilder (RetryEvent   n)    = Just $ flushAfter $ field "retry:" (T.pack (show n))
+eventToBuilder (ServerEvent n i d) = Just $ flushAfter $ mconcat $
+    name n $ evid i $ map (field "data:") (T.lines d) ++ [nl]
   where
     name Nothing  = id
     name (Just n) = (field "event:" n :)
