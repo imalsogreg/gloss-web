@@ -6,6 +6,7 @@ import Control.Concurrent
 import Control.Monad
 import Control.Monad.Trans
 import Data.Aeson
+import Data.Aeson.Encode
 import Data.IORef
 import Data.Time
 import Graphics.Gloss
@@ -201,8 +202,7 @@ animateStream app = do
         t1 <- getCurrentTime
         writeIORef tv t1
         let t = realToFrac (t1 `diffUTCTime` t0)
-        return $ ServerEvent Nothing Nothing $
-            T.decodeUtf8 $ B.concat $ LB.toChunks $ encode (f t)
+        return $ ServerEvent Nothing Nothing [ fromValue $ toJSON $ f t ]
   where
     targetInterval = 0.1
 
@@ -250,9 +250,7 @@ simulateStream app = do
         let t = realToFrac (t1 `diffUTCTime` t0)
         let sim' = advanceSimulation t sim
         let pic  = simulationToPicture sim'
-        return ((t1, sim'),
-            ServerEvent Nothing Nothing $
-                T.decodeUtf8 $ B.concat $ LB.toChunks $ encode pic)
+        return ((t1, sim'), ServerEvent Nothing Nothing [ fromValue $ toJSON pic ])
   where
     targetInterval = 0.1
 

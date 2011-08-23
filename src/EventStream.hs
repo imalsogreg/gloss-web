@@ -11,6 +11,7 @@ module EventStream (
     ) where
 
 import Blaze.ByteString.Builder
+import Blaze.ByteString.Builder.Char8
 import Control.Monad.Trans
 import Control.Concurrent
 import Data.Monoid
@@ -28,12 +29,12 @@ import qualified Data.Text.Encoding as T
 -}
 data ServerEvent
     = ServerEvent {
-        eventName :: Maybe Text,
-        eventId   :: Maybe Text,
-        eventData :: Text
+        eventName :: Maybe Builder,
+        eventId   :: Maybe Builder,
+        eventData :: [Builder]
         }
     | CommentEvent {
-        eventComment :: Text
+        eventComment :: Builder
         }
     | RetryEvent {
         eventRetry :: Int
@@ -42,21 +43,25 @@ data ServerEvent
 
 
 {-|
-    Create a builder from a text field.
+    Newline as a Builder.
 -}
-builder t = fromByteString (T.encodeUtf8 t)
+nl = fromChar '\n'
 
 
 {-|
-    Newline as a Builder object.
+    Field names as Builder
 -}
-nl = builder "\n"
+nameField = fromString "event:"
+idField = fromString "id:"
+dataField = fromString "data:"
+retryField = fromString "retry:"
+commentField = fromChar ':'
 
 
 {-|
     Wraps the text as a labeled field of an event stream.
 -}
-field l t = builder l `mappend` builder t `mappend` nl
+field l b = l `mappend` b `mappend` nl
 
 
 {-|
@@ -70,16 +75,19 @@ flushAfter b = b `mappend` flush
     @text/event-stream@ content type.
 -}
 eventToBuilder :: ServerEvent -> Maybe Builder
-eventToBuilder (CloseEvent)        = Nothing
-eventToBuilder (CommentEvent txt)  = Just $ flushAfter $ field ":" txt
-eventToBuilder (RetryEvent   n)    = Just $ flushAfter $ field "retry:" (T.pack (show n))
-eventToBuilder (ServerEvent n i d) = Just $ flushAfter $ mconcat $
-    name n $ evid i $ map (field "data:") (T.lines d) ++ [nl]
+eventToBuilder (CloseEvent)
+    = Nothing
+eventToBuilder (CommentEvent txt)
+    = Just $ flushAfter $ field commentField txt
+eventToBuilder (RetryEvent   n)
+    = Just $ flushAfter $ field retryField (fromShow n)
+eventToBuilder (ServerEvent n i d)
+    = Just $ flushAfter $ (name n $ evid i $ mconcat (map (field dataField) d)) `mappend` nl
   where
     name Nothing  = id
-    name (Just n) = (field "event:" n :)
+    name (Just n) = mappend (field nameField n)
     evid Nothing  = id
-    evid (Just i) = (field "id:"   i :)
+    evid (Just i) = mappend (field idField   i)
 
 
 {-|
