@@ -18,10 +18,6 @@ import Data.Monoid
 import Data.Enumerator.List (generateM)
 import Snap.Types
 
-import           Data.Text (Text)
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
-
 {-|
     Type representing a communication over an event stream.  This can be an
     actual event, a comment, a modification to the retry timer, or a special
