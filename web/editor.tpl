@@ -6,7 +6,12 @@
         <link rel="stylesheet" href="theme/default.css">
         <style type="text/css">
             html { height: 100% }
-            body { min-height: 98% }
+            body { position: absolute;
+                   left: 2px;
+                   right: 2px;
+                   top: 2px;
+                   bottom: 2px;
+                   margin: 0 0 0 0 }
             .CodeMirror {
                 border: dotted gray 1px;
                 height: 100%;
@@ -78,7 +83,7 @@
             }
         </script>
     </head>
-    <body style="position: relative">
+    <body>
         <div style="height: 70px">
             <div style="float:right">
                 <a href="anim"><img src="animate.png" border=0 width=64 height=64 alt="Animate"></a>
