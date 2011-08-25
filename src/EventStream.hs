@@ -71,11 +71,11 @@ flushAfter b = b `mappend` flush
     @text/event-stream@ content type.
 -}
 eventToBuilder :: ServerEvent -> Maybe Builder
-eventToBuilder (ServerEvent n i d)= Just $ flushAfter $
-    (name n $ evid i $ mconcat (map (field dataField) d)) `mappend` nl
 eventToBuilder (CommentEvent txt) = Just $ flushAfter $ field commentField txt
 eventToBuilder (RetryEvent   n)   = Just $ flushAfter $ field retryField (fromShow n)
 eventToBuilder (CloseEvent)       = Nothing
+eventToBuilder (ServerEvent n i d)= Just $ flushAfter $
+    (name n $ evid i $ mconcat (map (field dataField) d)) `mappend` nl
   where
     name Nothing  = id
     name (Just n) = mappend (field nameField n)
