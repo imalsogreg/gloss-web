@@ -27,7 +27,7 @@
                     document.getElementById("editor"), {
                         matchBrackets: true,
                         indentWithTabs: false,
-                        identUnit: 4,
+                        indentUnit: 4,
                         tabMode: "shift",
                         lineNumbers: true
                         }
