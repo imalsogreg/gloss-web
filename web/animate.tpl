@@ -1,6 +1,13 @@
+<!DOCTYPE html>
 <html>
     <head>
         <title>Animation</title>
+        <style type="text/css">
+        body {
+            margin: 0 0 0 0;
+            text-align: center;
+            }
+        </style>
         <!--[if IE]>
         <script type="text/javascript" src="excanvas.js"></script>
         <![endif]-->
