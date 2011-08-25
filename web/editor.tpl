@@ -28,7 +28,7 @@
                         matchBrackets: true,
                         indentWithTabs: false,
                         identUnit: 4,
-                        tabMode: "indent",
+                        tabMode: "shift",
                         lineNumbers: true
                         }
                     );
