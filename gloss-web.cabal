@@ -17,6 +17,7 @@ Executable gloss-web
   Main-is:           Main.hs
   Ghc-options:       -O2
   Build-depends:     aeson,
+                     array,
                      base,
                      base64-bytestring,
                      blaze-builder,
@@ -26,7 +27,6 @@ Executable gloss-web
                      directory,
                      enumerator,
                      filepath,
-                     gd,
                      ghc >= 7.2,
                      ghc-paths,
                      gloss,
@@ -39,5 +39,5 @@ Executable gloss-web
                      text,
                      time,
                      vector,
-                     xmlhtml
-
+                     xmlhtml,
+                     zlib
