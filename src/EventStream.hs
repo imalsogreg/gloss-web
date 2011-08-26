@@ -87,19 +87,19 @@ eventToBuilder (ServerEvent n i d)= Just $ flushAfter $
     Sets up this request to act as an event stream, obtaining its events from
     polling the given IO action.
 -}
-eventStreamPull       :: IO ServerEvent -> Snap ()
+eventStreamPull :: IO ServerEvent -> Snap ()
 eventStreamPull source = do
     modifyResponse (setContentType "text/event-stream")
     timeout <- getTimeoutAction
     modifyResponse $ setResponseBody $
-        generateM (timeout 10 >> fmap eventToBuilder source)
+        generateM (timeout 1 >> fmap eventToBuilder source)
 
 
 {-|
     Sets up this request to act as an event stream, returning an action to send
     events along the stream.
 -}
-eventStreamPush   :: Snap (ServerEvent -> IO ())
+eventStreamPush :: Snap (ServerEvent -> IO ())
 eventStreamPush = do
     chan <- liftIO newChan
     eventStreamPull (readChan chan)
