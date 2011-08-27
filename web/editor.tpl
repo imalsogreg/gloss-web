@@ -35,9 +35,15 @@
                         indentUnit: 4,
                         tabMode: "shift",
                         lineNumbers: true,
-                        theme: "glossweb"
+                        theme: "glossweb",
+                        onCursorActivity: function() {
+                            editor.setLineClass(hlLine, null);
+                            hlLine = editor.setLineClass(editor.getCursor().line, "activeline");
+                            }
                         }
                     );
+
+                var hlLine = editor.setLineClass(0, "activeline");
 
                 var all = document.cookie;
                 var list = all.split("; ");
