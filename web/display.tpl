@@ -17,7 +17,21 @@
         <script type="text/javascript">
             function init()
             {
-                displayInCanvas(document.getElementById('screen'), picture);
+                var canvas = document.getElementById("screen");
+
+                if (window.picture)
+                {
+                    displayInCanvas(canvas, picture);
+                }
+
+                if (window.eventURI)
+                {
+                    var eventSource = new EventSource(eventURI);
+                    eventSource.onmessage = function(event) {
+                        var pic = JSON.parse(event.data);
+                        displayInCanvas(canvas, pic);
+                    }
+                }
             }
         </script>
     </head>
@@ -26,7 +40,7 @@
                 width="500"
                 height="500"
                 style="border:solid black 1px"
-                onmouseover="tooltip.show('Testing 123 <strong>Testing 123</strong>');"
+                onmouseover="tooltip.show();"
                 onmouseout="tooltip.hide();">
         </canvas>
         <script type="text/javascript" src="tooltip.js"></script>

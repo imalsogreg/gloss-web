@@ -9,11 +9,10 @@ var tooltip=function(){
 	var timer = 20;
 	var endalpha = 95;
 	var alpha = 0;
-	var tt,t,c,b,h,rel;
+	var tt,t,c,b,h;
 	var ie = document.all ? true : false;
 	return{
-		show:function(r){
-			rel = r;
+		show:function(){
 			if(tt == null){
 				tt = document.createElement('div');
 				tt.setAttribute('id',id);

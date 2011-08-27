@@ -173,8 +173,8 @@ animate app f = do
     let anim = (t, f)
     k <- liftIO $ newClient (appAnimations app) anim
     Just (b, t) <- renderTemplate
-        (bindSplice "streamScript" (scrSplice k) (appHeist app))
-        "animate"
+        (bindSplice "displayScript" (scrSplice k) (appHeist app))
+        "display"
     modifyResponse (setContentType t)
     writeBuilder b
   where
@@ -222,8 +222,8 @@ simulate app sim = do
     simul <- liftIO $ newMVar (t, sim)
     k     <- liftIO $ newClient (appSimulations app) simul
     Just (b, t) <- renderTemplate
-        (bindSplice "streamScript" (scrSplice k) (appHeist app))
-        "animate"
+        (bindSplice "displayScript" (scrSplice k) (appHeist app))
+        "display"
     modifyResponse (setContentType t)
     writeBuilder b
   where
