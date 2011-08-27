@@ -41,7 +41,8 @@
                 height="500"
                 style="border:solid black 1px"
                 onmouseover="tooltip.show();"
-                onmouseout="tooltip.hide();">
+                onmouseout="tooltip.hide();"
+                onclick="tooltip.pin();">
         </canvas>
         <script type="text/javascript" src="tooltip.js"></script>
     </body>

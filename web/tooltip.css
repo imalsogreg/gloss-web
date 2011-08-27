@@ -5,9 +5,16 @@
 
 .ttcont {
     display    : block;
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+    border-bottom-right-radius: 10px;
+    -moz-border-top-left-radius: 10px;
+    -moz-border-top-right-radius: 10px;
+    -moz-border-bottom-right-radius: 10px;
     padding    : 2px 12px 3px 7px;
     margin-left: 5px;
     background : #666;
-    color      : #FFF
+    color      : #FFF;
+    cursor     : pointer
     }
 

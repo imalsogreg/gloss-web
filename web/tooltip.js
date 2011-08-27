@@ -25,6 +25,7 @@ var tooltip = function() {
 				tt.style.filter = 'alpha(opacity=0)';
 				document.onmousemove = this.pos;
 			}
+
 			tt.style.display = 'block';
 			c.innerHTML = '()';
 			tt.style.width = '90px';
@@ -35,6 +36,12 @@ var tooltip = function() {
 		},
 
 		pos: function(e) {
+			if (tt == null)
+			{
+				tooltip.show();
+				return;
+			}
+
 			var u,l;
 
 			if (e.pageX)
@@ -54,6 +61,8 @@ var tooltip = function() {
 		},
 
 		fade: function(d) {
+			if (tt == null) return;
+
 			var a = alpha;
 			if((a != endalpha && d == 1) || (a != 0 && d == -1))
 			{
@@ -78,8 +87,40 @@ var tooltip = function() {
 		},
 
 		hide: function() {
-			clearInterval(tt.timer);
-			tt.timer = setInterval(function(){tooltip.fade(-1)},timer);
+			if (tt != null)
+			{
+				clearInterval(tt.timer);
+				tt.timer = setInterval(function(){tooltip.fade(-1)},timer);
+			}
+		},
+
+		pin: function() {
+			if (tt == null || tt.style.display == 'none') return;
+
+			var pinned = tt;
+			tt = null;
+			alpha = 0;
+
+			var u,l;
+			if (event.pageX)
+			{
+				u = event.pageY;
+				l = event.pageX;
+			}
+			else
+			{
+				u = event.clientY + document.documentElement.scrollTop;
+				l = event.clientX + document.documentElement.scrollLeft;
+			}
+
+			pinned.style.left = (l - 6) + 'px';
+			pinned.style.top = (u - h + 1) + 'px';
+			pinned.style.filter = 'alpha(opacity=' + endalpha + ')';
+
+			pinned.onclick = function()
+			{
+				pinned.parentNode.removeChild(pinned);
+			}
 		}
 	};
 }();
