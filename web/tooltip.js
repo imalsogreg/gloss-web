@@ -1,30 +1,25 @@
 /*
  * Tooltip function by Michael Leigeber, modified by Chris Smith
  */
-var tooltip=function(){
-	var id = 'tt';
+var tooltip = function() {
 	var top = 3;
-	var left = 3;
+	var left = 0;
 	var speed = 10;
 	var timer = 20;
-	var endalpha = 95;
+	var endalpha = 90;
 	var alpha = 0;
-	var tt,t,c,b,h;
-	var ie = document.all ? true : false;
-	return{
-		show:function(){
-			if(tt == null){
+	var tt = null;
+	var c, h;
+
+	return {
+		show: function() {
+			if(tt == null)
+			{
 				tt = document.createElement('div');
-				tt.setAttribute('id',id);
-				t = document.createElement('div');
-				t.setAttribute('id',id + 'top');
+				tt.className = 'tt';
 				c = document.createElement('div');
-				c.setAttribute('id',id + 'cont');
-				b = document.createElement('div');
-				b.setAttribute('id',id + 'bot');
-				tt.appendChild(t);
+				c.className = 'ttcont';
 				tt.appendChild(c);
-				tt.appendChild(b);
 				document.body.appendChild(tt);
 				tt.style.opacity = 0;
 				tt.style.filter = 'alpha(opacity=0)';
@@ -32,37 +27,57 @@ var tooltip=function(){
 			}
 			tt.style.display = 'block';
 			c.innerHTML = '()';
-			tt.style.width = '80px';
+			tt.style.width = '90px';
 			tt.style.whiteSpace = 'nowrap';
 			h = parseInt(tt.offsetHeight) + top;
 			clearInterval(tt.timer);
-			tt.timer = setInterval(function(){tooltip.fade(1)},timer);
+			tt.timer = setInterval(function() { tooltip.fade(1) }, timer);
 		},
-		pos:function(e){
-			var u = ie ? event.clientY + document.documentElement.scrollTop : e.pageY;
-			var l = ie ? event.clientX + document.documentElement.scrollLeft : e.pageX;
+
+		pos: function(e) {
+			var u,l;
+
+			if (e.pageX)
+			{
+				var u = e.pageY;
+				var l = e.pageX;
+			}
+			else
+			{
+				var u = event.clientY + document.documentElement.scrollTop;
+				var l = event.clientX + document.documentElement.scrollLeft;
+			}
+
 			tt.style.top = (u - h) + 'px';
 			tt.style.left = (l + left) + 'px';
 			c.innerHTML = "(" + (l - 264) + "," + (252 - u) + ")";
 		},
-		fade:function(d){
+
+		fade: function(d) {
 			var a = alpha;
-			if((a != endalpha && d == 1) || (a != 0 && d == -1)){
+			if((a != endalpha && d == 1) || (a != 0 && d == -1))
+			{
 				var i = speed;
-				if(endalpha - a < speed && d == 1){
+				if(endalpha - a < speed && d == 1)
+				{
 					i = endalpha - a;
-				}else if(alpha < speed && d == -1){
+				}
+				else if(alpha < speed && d == -1)
+				{
 					i = a;
 				}
 				alpha = a + (i * d);
 				tt.style.opacity = alpha * .01;
 				tt.style.filter = 'alpha(opacity=' + alpha + ')';
-			}else{
+			}
+			else
+			{
 				clearInterval(tt.timer);
 				if(d == -1){tt.style.display = 'none'}
 			}
 		},
-		hide:function(){
+
+		hide: function() {
 			clearInterval(tt.timer);
 			tt.timer = setInterval(function(){tooltip.fade(-1)},timer);
 		}
