@@ -3,7 +3,7 @@
     <head>
         <script type="text/javascript" src="codemirror-compressed.js"></script>
         <link rel="stylesheet" href="codemirror.css">
-        <link rel="stylesheet" href="theme/default.css">
+        <link rel="stylesheet" href="theme/glossweb.css">
         <style type="text/css">
             html { height: 100% }
             body { position: absolute;
@@ -34,7 +34,8 @@
                         indentWithTabs: false,
                         indentUnit: 4,
                         tabMode: "shift",
-                        lineNumbers: true
+                        lineNumbers: true,
+                        theme: "glossweb"
                         }
                     );
 
