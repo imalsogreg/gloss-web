@@ -1,8 +1,13 @@
-{-# LANGUAGE MagicHash                 #-}
+{-# LANGUAGE CPP                 #-}
+{-# LANGUAGE MagicHash           #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Source where
 
+import Prelude hiding (catch)
+
 import Control.Concurrent.MVar
+import Control.Exception
 import Control.Monad
 import Crypto.Hash.MD5
 import Data.IORef
@@ -33,6 +38,49 @@ import App
 import GlossAdapters
 
 
+#ifdef mingw32_HOST_OS
+import GHC.ConsoleHandler as C
+
+
+saveHandlers :: IO C.Handler
+saveHandlers = C.installHandler Ignore
+
+
+restoreHandlers :: C.Handler -> IO C.Handler
+restoreHandlers = C.installHandler
+
+
+#else
+import qualified System.Posix.Signals as S
+
+helper :: S.Handler -> S.Signal -> IO S.Handler
+helper handler signal = S.installHandler signal handler Nothing
+
+
+signals :: [S.Signal]
+signals = [ S.sigQUIT
+          , S.sigINT
+          , S.sigHUP
+          , S.sigTERM
+          ]
+
+
+saveHandlers :: IO [S.Handler]
+saveHandlers = mapM (helper S.Ignore) signals
+
+
+restoreHandlers :: [S.Handler] -> IO [S.Handler]
+restoreHandlers h = sequence $ zipWith helper h signals
+#endif
+
+{-|
+    Save off signal handlers and such, so that they can be restored following
+    the use of the GHC API.  Code shamelessly stolen from Snap.
+-}
+protectHandlers :: IO a -> IO a
+protectHandlers a = bracket saveHandlers restoreHandlers $ const a
+
+
 getPicture :: App -> ByteString -> IO (Either [String] Picture)
 getPicture app src = do
     getCompileResult (appCompiledPictures app)
@@ -56,13 +104,21 @@ getSimulation app src = do
                      "Simulation"
                      src
 
-
-base64FileName :: ByteString -> String
+{-|
+    Base64 encodes a ByteString, and forms a filename from it.  Since this is
+    a file name, we need to use '-' intead of '/'.
+-}
+base64FileName :: ByteString -> FilePath
 base64FileName str = map slashToDash $ BC.unpack $ B64.encode str
     where slashToDash '/' = '-'
           slashToDash c   = c
 
 
+{-|
+    Returns a possibly cached compile result.  The map in the first parameter
+    is the cache, which should be different for different expected variables
+    and types
+-}
 getCompileResult :: MVar (Map ByteString (Either [String] t))
                  -> String
                  -> String
@@ -79,48 +135,74 @@ getCompileResult var vname tname src = modifyMVar var $ \m -> do
             Just res -> return (m, res)
 
 
-compile :: String -> String -> FilePath -> IO (Either [String] t)
-compile vname tname fn = fixupErrors =<< do
+{-|
+    Runs an action in the 'Ghc' monad, and automatically collects error
+    messages.  There are multiple ways error messages get reported, and
+    it's a bit of tricky trial-and-error to handle them all uniformly, so
+    this function abstracts that.
+-}
+doWithErrors :: GHC.Ghc (Maybe a) -> IO (Either [String] a)
+doWithErrors action = do
     codeErrors <- newIORef []
-    GHC.defaultErrorHandler (addErrorTo codeErrors)
-        $ GHC.runGhc (Just GHC.libdir)
-        $ GHC.handleSourceError (handle codeErrors) $ do
-            dflags <- GHC.getSessionDynFlags
-            GHC.setSessionDynFlags $ dflags {
-                GHC.ghcMode = GHC.CompManager,
-                GHC.ghcLink = GHC.LinkInMemory,
-                GHC.hscTarget = GHC.HscAsm,
-                GHC.optLevel = 2,
-                GHC.safeHaskell = GHC.Sf_Safe,
-                GHC.packageFlags = [GHC.TrustPackage "gloss",
-                                    GHC.ExposePackage "gloss-web-adapters" ],
-                GHC.log_action = addErrorTo codeErrors
-                }
-            target <- GHC.guessTarget fn Nothing
-            GHC.setTargets [target]
-            r <- fmap GHC.succeeded (GHC.load GHC.LoadAllTargets)
-            case r of
-                True -> do
-                    mods <- GHC.getModuleGraph
-                    GHC.setContext [ GHC.ms_mod (head mods) ]
-                                   [ GHC.simpleImportDecl
-                                       (GHC.mkModuleName "Graphics.Gloss"),
-                                     GHC.simpleImportDecl
-                                       (GHC.mkModuleName "GlossAdapters") ]
-                    v <- GHC.compileExpr $ vname ++ " :: " ++ tname
-                    return (Right (unsafeCoerce# v))
-                False -> return (Left codeErrors)
+    protectHandlers $ catch (wrapper codeErrors) $ \ (e :: SomeException) -> do
+        errs <- readIORef codeErrors
+        return (Left errs)
   where
-    handle ref se = do
-        let errs    = GHC.bagToList (GHC.srcErrorMessages se)
-            nice e  = GHC.showSDoc (GHC.errMsgShortDoc e)
-            cleaned = map nice errs
-        GHC.liftIO $ modifyIORef ref (++ cleaned)
-        return (Left ref)
-    addErrorTo ref _ span style msg =
+    wrapper codeErrors = fixupErrors codeErrors =<< do
+        GHC.defaultErrorHandler (logAction codeErrors)
+            $ GHC.runGhc (Just GHC.libdir)
+            $ GHC.handleSourceError (handle codeErrors)
+            $ do
+                dflags <- GHC.getSessionDynFlags
+                GHC.setSessionDynFlags dflags {
+                    GHC.log_action = logAction codeErrors
+                    }
+                action
+    logAction errs _ span style msg =
         let niceError = GHC.showSDoc
                 $ GHC.withPprStyle style $ GHC.mkLocMessage span msg
-        in  modifyIORef ref (++ [ niceError ])
-    fixupErrors (Right x) = return (Right x)
-    fixupErrors (Left  x) = fmap Left (readIORef x)
+        in  writeErr errs niceError
+    writeErr ref err = modifyIORef ref (++ [ err ])
+    handle ref se = do
+        let errs    = GHC.bagToList (GHC.srcErrorMessages se)
+            cleaned = map (GHC.showSDoc . GHC.errMsgShortDoc) errs
+        GHC.liftIO $ modifyIORef ref (++ cleaned)
+        return Nothing
+    fixupErrors errs (Just x) = return (Right x)
+    fixupErrors errs Nothing  = fmap Left (readIORef errs)
+
+
+{-|
+    Compile the module in the given file name, and return the named value
+    with the given type.  If the type passed in doesn't match the way the
+    result is used, the server process will likely segfault.
+-}
+compile :: String -> String -> FilePath -> IO (Either [String] t)
+compile vname tname fn = doWithErrors $ do
+    dflags <- GHC.getSessionDynFlags
+    let dflags' = dflags {
+        GHC.ghcMode = GHC.CompManager,
+        GHC.ghcLink = GHC.LinkInMemory,
+        GHC.hscTarget = GHC.HscAsm,
+        GHC.optLevel = 2,
+        GHC.safeHaskell = GHC.Sf_Safe,
+        GHC.packageFlags = [GHC.TrustPackage "gloss",
+                            GHC.ExposePackage "gloss-web-adapters" ]
+        }
+    GHC.setSessionDynFlags dflags'
+    target <- GHC.guessTarget fn Nothing
+    GHC.setTargets [target]
+    r <- fmap GHC.succeeded (GHC.load GHC.LoadAllTargets)
+    case r of
+        True -> do
+            mods <- GHC.getModuleGraph
+            let mainMod = GHC.ms_mod (head mods)
+            GHC.setContext [ mainMod ]
+                           [ GHC.simpleImportDecl
+                               (GHC.mkModuleName "Graphics.Gloss"),
+                             GHC.simpleImportDecl
+                               (GHC.mkModuleName "GlossAdapters") ]
+            v <- GHC.compileExpr $ vname ++ " :: " ++ tname
+            return (Just (unsafeCoerce# v))
+        False -> return Nothing
 

@@ -33,6 +33,7 @@ Executable gloss-web
                      gloss-web-adapters,
                      heist,
                      mtl,
+                     process,
                      random,
                      snap-core,
                      snap-server,
@@ -41,3 +42,6 @@ Executable gloss-web
                      vector,
                      xmlhtml,
                      zlib
+
+  if !os(windows)
+    Build-depends:   unix
