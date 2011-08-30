@@ -5,3 +5,5 @@ tmp/*.hi
 tmp/*.o
 tmp/*.png
 log
+gloss-web.hp
+gloss-web.prof

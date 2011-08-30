@@ -36,50 +36,22 @@ import qualified DynFlags   as GHC
 
 import App
 import GlossAdapters
+import ProtectHandlers
 
+#ifdef PROFILE_SUBST
 
-#ifdef mingw32_HOST_OS
-import GHC.ConsoleHandler as C
+import ProfileSubst
 
+getPicture :: App -> ByteString -> IO (Either [String] Picture)
+getPicture _ _ = return (Right picture)
 
-saveHandlers :: IO C.Handler
-saveHandlers = C.installHandler Ignore
+getAnimation :: App -> ByteString -> IO (Either [String] (Float -> Picture))
+getAnimation _ _ = return (Right animation)
 
-
-restoreHandlers :: C.Handler -> IO C.Handler
-restoreHandlers = C.installHandler
-
+getSimulation :: App -> ByteString -> IO (Either [String] Simulation)
+getSimulation _ _ = return (Right simulation)
 
 #else
-import qualified System.Posix.Signals as S
-
-helper :: S.Handler -> S.Signal -> IO S.Handler
-helper handler signal = S.installHandler signal handler Nothing
-
-
-signals :: [S.Signal]
-signals = [ S.sigQUIT
-          , S.sigINT
-          , S.sigHUP
-          , S.sigTERM
-          ]
-
-
-saveHandlers :: IO [S.Handler]
-saveHandlers = mapM (helper S.Ignore) signals
-
-
-restoreHandlers :: [S.Handler] -> IO [S.Handler]
-restoreHandlers h = sequence $ zipWith helper h signals
-#endif
-
-{-|
-    Save off signal handlers and such, so that they can be restored following
-    the use of the GHC API.  Code shamelessly stolen from Snap.
--}
-protectHandlers :: IO a -> IO a
-protectHandlers a = bracket saveHandlers restoreHandlers $ const a
-
 
 getPicture :: App -> ByteString -> IO (Either [String] Picture)
 getPicture app src = do
@@ -103,6 +75,8 @@ getSimulation app src = do
                      "Simulation initial step draw"
                      "Simulation"
                      src
+
+#endif
 
 {-|
     Base64 encodes a ByteString, and forms a filename from it.  Since this is
