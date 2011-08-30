@@ -28,8 +28,7 @@
                 {
                     var eventSource = new EventSource(eventURI);
                     eventSource.onmessage = function(event) {
-                        var pic = JSON.parse(event.data);
-                        displayInCanvas(canvas, pic);
+                        displayInCanvas(canvas, event.data);
                     }
                 }
             }

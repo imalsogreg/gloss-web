@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
+import Blaze.ByteString.Builder
 import Control.Applicative
 import Control.Concurrent
 import Control.Monad
@@ -29,7 +30,7 @@ import App
 import EventStream
 import ClientManager
 import Source
-import Instances
+import Serialize
 import GlossAdapters
 
 
@@ -152,9 +153,9 @@ display app pic = do
     writeBuilder b
   where
     scrSplice pic = return [ Element "script" [("type", "text/javascript")] [
-        TextNode "picture = ",
-        TextNode $ T.decodeUtf8 $ B.concat $ LB.toChunks $ encode pic,
-        TextNode ";"
+        TextNode "picture = '",
+        TextNode $ T.decodeUtf8 $ toByteString $ base64 $ fromPicture pic,
+        TextNode "';"
         ]]
 
 
@@ -202,7 +203,7 @@ animateStream app = do
         t1 <- getCurrentTime
         writeIORef tv t1
         let t = realToFrac (t1 `diffUTCTime` t0)
-        return $ ServerEvent Nothing Nothing [ fromValue $ toJSON $ f t ]
+        return $ ServerEvent Nothing Nothing [ base64 $ fromPicture $ f t ]
   where
     targetInterval = 0.1
 
@@ -250,7 +251,7 @@ simulateStream app = do
         let t = realToFrac (t1 `diffUTCTime` t0)
         let sim' = advanceSimulation t sim
         let pic  = simulationToPicture sim'
-        return ((t1, sim'), ServerEvent Nothing Nothing [ fromValue $ toJSON pic ])
+        return ((t1, sim'), ServerEvent Nothing Nothing [ base64 $ fromPicture pic ])
   where
     targetInterval = 0.1
 

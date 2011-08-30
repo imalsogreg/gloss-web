@@ -78,15 +78,6 @@ getSimulation app src = do
 
 #endif
 
-{-|
-    Base64 encodes a ByteString, and forms a filename from it.  Since this is
-    a file name, we need to use '-' intead of '/'.
--}
-base64FileName :: ByteString -> FilePath
-base64FileName str = map slashToDash $ BC.unpack $ B64.encode str
-    where slashToDash '/' = '-'
-          slashToDash c   = c
-
 
 {-|
     Returns a possibly cached compile result.  The map in the first parameter
