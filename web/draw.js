@@ -54,8 +54,9 @@ function Stream(b)
     this.popUtf8 = function(len)
     {
         var utftext = this.popBytes(len);
-    	var string = "";
-    	var i = 0;
+    	var res = [];
+
+    	var i = 0, j = 0;
     	var c = c1 = c2 = 0;
 
     	while ( i < utftext.length )
@@ -64,26 +65,80 @@ function Stream(b)
 
     		if (c < 128)
     		{
-    			string += String.fromCharCode(c);
+    			res[j++] = String.fromCharCode(c);
 	    		i++;
 	    	}
     		else if ((c > 191) && (c < 224))
     		{
     			c2 = utftext.charCodeAt(i+1);
-	    		string += String.fromCharCode(((c & 31) << 6) | (c2 & 63));
+	    		res[j++] = String.fromCharCode(((c & 31) << 6) | (c2 & 63));
 	    		i += 2;
 	    	}
     		else
     		{
     			c2 = utftext.charCodeAt(i+1);
 	    		c3 = utftext.charCodeAt(i+2);
-	    		string += String.fromCharCode(((c & 15) << 12) | ((c2 & 63) << 6) | (c3 & 63));
+	    		res[j++] = String.fromCharCode(((c & 15) << 12) | ((c2 & 63) << 6) | (c3 & 63));
 	    		i += 3;
 	    	}
         }
 
-    	return string;
+    	return res.join("");
 	}
+}
+
+if (!window.atob)
+{
+    window.atob = function(a)
+    {
+        var b64 = function(c)
+        {
+            if      (c >= 65 && c <  91) return c - 65;
+            else if (c >= 97 && c < 123) return c - 71;
+            else if (c >= 48 && c <  58) return c +  4;
+            else if (c == 43           ) return 62;
+            else if (c == 47           ) return 63;
+            else return 0;
+        }
+
+        var result = [];
+
+        var i;
+        for (i = 0; i < a.length; i += 4)
+        {
+            var x = a.charCodeAt(i);
+            var y = a.charCodeAt(i+1);
+            var z = a.charCodeAt(i+2);
+            var w = a.charCodeAt(i+3);
+
+            if (z == 61)
+            {
+                var ix = b64(x);
+                var iy = b64(y);
+                result.push(String.fromCharCode(0xff & (ix << 2) | (iy >> 4)));
+            }
+            else if (w == 61)
+            {
+                var ix = b64(x);
+                var iy = b64(y);
+                var iz = b64(z);
+                result.push(String.fromCharCode(0xff & (ix << 2) | (iy >> 4)),
+                            String.fromCharCode(0xff & (iy << 4) | (iz >> 2)));
+            }
+            else
+            {
+                var ix = b64(x);
+                var iy = b64(y);
+                var iz = b64(z);
+                var iw = b64(w);
+                result.push(String.fromCharCode(0xff & (ix << 2) | (iy >> 4)),
+                            String.fromCharCode(0xff & (iy << 4) | (iz >> 2)),
+                            String.fromCharCode(0xff & (iz << 6) | (iw     )));
+            }
+        }
+
+        return result.join("");
+    }
 }
 
 var ctx = null;
