@@ -349,7 +349,6 @@ gameStream app = do
 
 gameEvent :: App -> Snap ()
 gameEvent app = do
-    liftIO . print . BC.unpack =<< fmap rqQueryString getRequest
     typ <- maybe pass return =<< getParam "type"
     case typ of
         "k" -> key
