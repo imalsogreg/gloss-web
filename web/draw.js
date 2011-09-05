@@ -620,6 +620,8 @@ function init()
         };
 
         canvas.onmousedown = function(e) {
+            canvas.focus();
+
             var box = canvas.getBoundingClientRect();
             var x = e.clientX - box.left - 250;
             var y = 250 - e.clientY + box.top;
