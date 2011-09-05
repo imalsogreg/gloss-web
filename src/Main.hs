@@ -167,13 +167,13 @@ game app = do
     actionSplice = return [ TextNode "gameInBrowser" ]
     defaultsSplice = return [ Element "script" [("type", "text/javascript")] [
         TextNode "var sourceCookie = 'gameSource';",
-        TextNode "var initialSource = 'import Graphics.Gloss\n",
-        TextNode "import Graphics.Gloss.Interface.Game\n\n",
-        TextNode "initial :: Point\n",
-        TextNode "initial = (0.0,0.0)\n\n",
-        TextNode "event (EventMotion (x,y)) world = (x,y)\n",
-        TextNode "event _                   world = world\n\n",
-        TextNode "step time world = world\n\n",
+        TextNode "var initialSource = 'import Graphics.Gloss\\n",
+        TextNode "import Graphics.Gloss.Interface.Game\\n\\n",
+        TextNode "initial :: Point\\n",
+        TextNode "initial = (0.0,0.0)\\n\\n",
+        TextNode "event (EventMotion (x,y)) world = (x,y)\\n",
+        TextNode "event _                   world = world\\n\\n",
+        TextNode "step time world = world\\n\\n",
         TextNode "draw (x,y) = translate x y (circle 50)';"
         ]]
 
