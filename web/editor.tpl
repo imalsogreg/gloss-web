@@ -95,6 +95,7 @@
             <div style="float:right">
                 <a href="anim"><img src="animate.png" border=0 width=64 height=64 alt="Animate"></a>
                 <a href="draw"><img src="picture.png" border=0 width=64 height=64 alt="Picture"></a>
+                <a href="game"><img src="game.png" border=0 width=64 height=64 alt="Game"></a>
                 <a href="sim" ><img src="simulate.png" border=0 width=64 height=64 alt="Simulate"></a>
             </div>
             <div>
