@@ -9,11 +9,14 @@
 module ProfileSubst (
     picture,
     animation,
-    simulation
+    simulation,
+    game
     )
     where
 
 import Graphics.Gloss
+import Graphics.Gloss.Interface.Simulate
+import Graphics.Gloss.Interface.Game
 import GlossAdapters
 
 -----------------------------------------------------------------------
@@ -73,11 +76,19 @@ greener c = mixColors 1 10 green c
 
 -----------------------------------------------------------------------
 
-simulation = Simulation initial step draw
+simulation = Simulation initial (const step) draw
 
 data Ball = Ball Float Float
 
 initial = Ball 100 0
-step _ t (Ball x v) = Ball (x + v*t) (v - x*t)
+step t (Ball x v) = Ball (x + v*t) (v - x*t)
 draw (Ball x v) = translate x 0 (circle 20)
+
+-----------------------------------------------------------------------
+
+game = Game initial event step draw
+
+event (EventKey (Char '1') _ _ _) (Ball x v) = Ball x (v - 10)
+event (EventKey (Char '2') _ _ _) (Ball x v) = Ball x (v + 10)
+event _                           (Ball x v) = Ball x v
 

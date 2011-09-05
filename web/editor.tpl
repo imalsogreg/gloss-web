@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html>
     <head>
-        <script type="text/javascript" src="codemirror-compressed.js"></script>
         <link rel="stylesheet" href="codemirror.css">
         <link rel="stylesheet" href="theme/glossweb.css">
         <style type="text/css">
@@ -23,6 +22,7 @@
                 max-height: 100%;
                 }
         </style>
+        <script type="text/javascript" src="codemirror-compressed.js"></script>
         <defaults/>
         <script type="text/javascript">
             var editor;

@@ -11,6 +11,7 @@ import Data.Aeson.Encode
 import Data.IORef
 import Data.Time
 import Graphics.Gloss
+import Graphics.Gloss.Interface.Game
 import Snap.Http.Server
 import Snap.Types
 import Snap.Util.FileServe
@@ -41,12 +42,16 @@ main = do
     quickHttpServe $
         route [ ("draw",              draw app),
                 ("anim",              anim app),
-                ("sim",               sim app),
+                ("sim",               sim  app),
+                ("game",              game app),
                 ("displayInBrowser",  displayInBrowser  app),
                 ("animateInBrowser",  animateInBrowser  app),
                 ("animateStream",     animateStream     app),
                 ("simulateInBrowser", simulateInBrowser app),
-                ("simulateStream",    simulateStream    app) ]
+                ("simulateStream",    simulateStream    app),
+                ("gameInBrowser",     gameInBrowser app),
+                ("gameStream",        gameStream    app),
+                ("gameEvent",         gameEvent     app) ]
         <|> serveDirectory "web"
 
 
@@ -135,6 +140,41 @@ sim app = do
         ]]
 
 
+game :: App -> Snap ()
+game app = do
+    Just (b,t) <- renderTemplate
+        (addSplices (appHeist app))
+        "editor"
+    modifyResponse (setContentType t)
+    writeBuilder b
+  where
+    addSplices = bindSplices [
+        ("intro", introSplice),
+        ("action", actionSplice),
+        ("defaults", defaultsSplice)
+        ]
+    introSplice = return [
+        TextNode "Define variables called ",
+        Element "code" [] [TextNode "initial"],
+        TextNode ", ",
+        Element "code" [] [TextNode "event"],
+        TextNode ", ",
+        Element "code" [] [TextNode "step"],
+        TextNode ", and ",
+        Element "code" [] [TextNode "draw"],
+        TextNode " describing your game's initial state, event handler, step function, and appearance."
+        ]
+    actionSplice = return [ TextNode "gameInBrowser" ]
+    defaultsSplice = return [ Element "script" [("type", "text/javascript")] [
+        TextNode "var sourceCookie = 'gameSource';",
+        TextNode "var initialSource = 'import Graphics.Gloss\\n\\n",
+        TextNode "initial = undefined\\n",
+        TextNode "event e = undefined\\n",
+        TextNode "step t g = undefined\\n",
+        TextNode "draw g = undefined';"
+        ]]
+
+
 displayInBrowser :: App -> Snap ()
 displayInBrowser app = do
     src <- maybe pass return =<< getParam "source"
@@ -180,7 +220,7 @@ animate app f = do
     writeBuilder b
   where
     scrSplice k = return [ Element "script" [("type", "text/javascript")] [
-        TextNode "eventURI = \'animateStream?key=",
+        TextNode "streamURI = \'animateStream?key=",
         TextNode $ T.pack $ show k,
         TextNode "\';"
         ]]
@@ -229,7 +269,7 @@ simulate app sim = do
     writeBuilder b
   where
     scrSplice k = return [ Element "script" [("type", "text/javascript")] [
-        TextNode "eventURI = \'simulateStream?key=",
+        TextNode "streamURI = \'simulateStream?key=",
         TextNode $ T.pack $ show k,
         TextNode "\';"
         ]]
@@ -254,6 +294,137 @@ simulateStream app = do
         return ((t1, sim'), ServerEvent Nothing Nothing [ base64 $ fromPicture pic ])
   where
     targetInterval = 0.1
+
+
+gameInBrowser :: App -> Snap ()
+gameInBrowser app = do
+    src <- maybe pass return =<< getParam "source"
+    res <- liftIO $ getGame app src
+    case res of
+        Left errs -> errors app errs
+        Right pic -> runGame app pic
+
+
+runGame :: App -> Game -> Snap ()
+runGame app game = do
+    t     <- liftIO getCurrentTime
+    gvar  <- liftIO $ newMVar (t, game)
+    k     <- liftIO $ newClient (appGames app) gvar
+    Just (b, t) <- renderTemplate
+        (bindSplice "displayScript" (scrSplice k) (appHeist app))
+        "display"
+    modifyResponse (setContentType t)
+    writeBuilder b
+  where
+    scrSplice k = return [ Element "script" [("type", "text/javascript")] [
+        TextNode "streamURI = \'gameStream?key=",
+        TextNode $ T.pack $ show k,
+        TextNode "\';",
+        TextNode "eventURI = \'gameEvent?key=",
+        TextNode $ T.pack $ show k,
+        TextNode "\';"
+        ]]
+
+
+gameStream :: App -> Snap ()
+gameStream app = do
+    k                  <- maybe pass return
+                      =<< getParam "key"
+    (var, touch)       <- maybe pass return
+                      =<< liftIO (getClient (appGames app) (read (BC.unpack k)))
+    eventStreamPull $ modifyMVar var $ \(t0, game) -> do
+        touch
+        t1 <- getCurrentTime
+        let interval = t1 `diffUTCTime` t0
+        when (interval < targetInterval) $
+            threadDelay $ round $ 1000000 * (targetInterval - interval)
+        t1 <- getCurrentTime
+        let t = realToFrac (t1 `diffUTCTime` t0)
+        let game' = advanceGame t game
+        let pic  = gameToPicture game'
+        return ((t1, game'), ServerEvent Nothing Nothing [ base64 $ fromPicture pic ])
+  where
+    targetInterval = 0.1
+
+
+gameEvent :: App -> Snap ()
+gameEvent app = do
+    liftIO . print . BC.unpack =<< fmap rqQueryString getRequest
+    typ <- maybe pass return =<< getParam "type"
+    case typ of
+        "k" -> key
+        "m" -> move
+        _   -> pass
+  where
+    key  = do
+        k     <- toKey      =<< maybe pass return =<< getParam "btn"
+        d     <- toKeyState =<< maybe pass return =<< getParam "state"
+        shift <- toKeyState =<< maybe pass return =<< getParam "shift"
+        alt   <- toKeyState =<< maybe pass return =<< getParam "alt"
+        ctrl  <- toKeyState =<< maybe pass return =<< getParam "ctrl"
+        x     <- bsToNum    =<< maybe pass return =<< getParam "x"
+        y     <- bsToNum    =<< maybe pass return =<< getParam "y"
+        dispatch $ EventKey k d (Modifiers shift ctrl alt) (x,y)
+
+    move = do
+        x <- bsToNum =<< maybe pass return =<< getParam "x"
+        y <- bsToNum =<< maybe pass return =<< getParam "y"
+        dispatch $ EventMotion (x,y)
+
+    dispatch event = do
+        k                  <- maybe pass return
+                          =<< getParam "key"
+        (var, touch)       <- maybe pass return
+                          =<< liftIO (getClient (appGames app) (read (BC.unpack k)))
+        liftIO $ modifyMVar var $
+            \ (t0, game) -> return ((t0, signalGame event game), ())
+
+
+bsToNum :: ByteString -> Snap Float
+bsToNum bs = case reads (BC.unpack bs) of
+    [(f,"")] -> return f
+    _        -> pass
+
+
+toKeyState :: ByteString -> Snap KeyState
+toKeyState "1" = return Down
+toKeyState "0" = return Up
+toKeyState _   = pass
+
+
+toKey :: ByteString -> Snap Key
+toKey bs = case bs of
+    -- Special keys and mouse events; always > 1 character
+    "F1"                 -> return (SpecialKey KeyF1)
+    "F2"                 -> return (SpecialKey KeyF2)
+    "F3"                 -> return (SpecialKey KeyF3)
+    "F4"                 -> return (SpecialKey KeyF4)
+    "F5"                 -> return (SpecialKey KeyF5)
+    "F6"                 -> return (SpecialKey KeyF6)
+    "F7"                 -> return (SpecialKey KeyF7)
+    "F8"                 -> return (SpecialKey KeyF8)
+    "F9"                 -> return (SpecialKey KeyF9)
+    "F10"                -> return (SpecialKey KeyF10)
+    "F11"                -> return (SpecialKey KeyF11)
+    "F12"                -> return (SpecialKey KeyF12)
+    "Left"               -> return (SpecialKey KeyLeft)
+    "Up"                 -> return (SpecialKey KeyUp)
+    "Right"              -> return (SpecialKey KeyRight)
+    "Down"               -> return (SpecialKey KeyDown)
+    "PageUp"             -> return (SpecialKey KeyPageUp)
+    "PageDown"           -> return (SpecialKey KeyPageDown)
+    "Home"               -> return (SpecialKey KeyHome)
+    "End"                -> return (SpecialKey KeyEnd)
+    "Insert"             -> return (SpecialKey KeyInsert)
+    "Del"                -> return (SpecialKey KeyDelete)
+    "NumLock"            -> return (SpecialKey KeyNumLock)
+    "lbtn"               -> return (MouseButton LeftButton)
+    "rbtn"               -> return (MouseButton RightButton)
+    "mbtn"               -> return (MouseButton MiddleButton)
+    "mwup"               -> return (MouseButton WheelUp)
+    "mwdn"               -> return (MouseButton WheelDown)
+    _ | B.length bs == 1 -> return (Char (BC.head bs))
+      | otherwise        -> pass
 
 
 errors :: App -> [String] -> Snap ()

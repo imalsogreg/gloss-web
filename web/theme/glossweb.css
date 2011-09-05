@@ -19,11 +19,9 @@
 .cm-s-glossweb span.cm-attribute {color: #00c;}
 
 .CodeMirror-matchingbracket    { color: inherit !important;
-                                 border: solid #ccc 1px;
-                                 margin: -1px }
+                                 outline: solid #ccc 1px }
 .CodeMirror-nonmatchingbracket { color: inherit !important;
-                                 border: solid #faa 1px;
-                                 margin: -1px }
+                                 outline: solid #faa 1px }
 
 .CodeMirror { font-family: 'Monaco', 'Menlo', 'Droid Sans Mono', 'Courier New', monospace;
               font-size: 10pt }

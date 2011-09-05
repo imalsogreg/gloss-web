@@ -17,16 +17,19 @@ import GlossAdapters
 import ClientManager
 
 
-type Anim = (UTCTime, Float -> Picture)
-type Sim = MVar (UTCTime, Simulation)
+type Anim        = (UTCTime, Float -> Picture)
+type Sim         = MVar (UTCTime, Simulation)
+type RunningGame = MVar (UTCTime, Game)
 
 data App = App {
     appHeist               :: TemplateState Snap,
     appAnimations          :: ClientManager Anim,
     appSimulations         :: ClientManager Sim,
+    appGames               :: ClientManager RunningGame,
     appCompiledPictures    :: MVar (Map ByteString (Either [String] Picture)),
     appCompiledAnimations  :: MVar (Map ByteString (Either [String] (Float -> Picture))),
-    appCompiledSimulations :: MVar (Map ByteString (Either [String] Simulation))
+    appCompiledSimulations :: MVar (Map ByteString (Either [String] Simulation)),
+    appCompiledGames       :: MVar (Map ByteString (Either [String] Game))
     }
 
 
@@ -34,10 +37,12 @@ newApp :: TemplateState Snap -> IO App
 newApp heist = do
     animMgr     <- newClientManager
     simMgr      <- newClientManager
+    gameMgr     <- newClientManager
     cpic        <- newMVar M.empty
     canim       <- newMVar M.empty
     csim        <- newMVar M.empty
-    return (App heist animMgr simMgr cpic canim csim)
+    cgame       <- newMVar M.empty
+    return (App heist animMgr simMgr gameMgr cpic canim csim cgame)
 
 
 {-|

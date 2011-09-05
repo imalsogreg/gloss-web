@@ -51,6 +51,9 @@ getAnimation _ _ = return (Right animation)
 getSimulation :: App -> ByteString -> IO (Either [String] Simulation)
 getSimulation _ _ = return (Right simulation)
 
+getGame :: App -> ByteString -> IO (Either [String] Game)
+getGame _ _ = return (Right game)
+
 #else
 
 getPicture :: App -> ByteString -> IO (Either [String] Picture)
@@ -74,6 +77,14 @@ getSimulation app src = do
     getCompileResult (appCompiledSimulations app)
                      "Simulation initial step draw"
                      "Simulation"
+                     src
+
+
+getGame :: App -> ByteString -> IO (Either [String] Game)
+getGame app src = do
+    getCompileResult (appCompiledGames app)
+                     "Game initial event step draw"
+                     "Game"
                      src
 
 #endif

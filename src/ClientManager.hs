@@ -9,11 +9,8 @@ import           Data.Map (Map)
 import qualified Data.Map as M
 
 
-type Key = Int
-
-
 data ClientManager a = Mgr {
-    clientMap :: MVar (Map Key (Client a))
+    clientMap :: MVar (Map Int (Client a))
     }
 
 
@@ -38,7 +35,7 @@ newClientManager = do
         return (t1 `diffUTCTime` t < 30)
 
 
-newClient :: ClientManager a -> a -> IO Key
+newClient :: ClientManager a -> a -> IO Int
 newClient (Mgr m) c = modifyMVar m $ go
   where go cmap = do
             k <- randomIO
@@ -50,7 +47,7 @@ newClient (Mgr m) c = modifyMVar m $ go
                     return (M.insert k cval cmap, k)
 
 
-getClient :: ClientManager a -> Key -> IO (Maybe (a, IO ()))
+getClient :: ClientManager a -> Int -> IO (Maybe (a, IO ()))
 getClient (Mgr m) k = withMVar m $ \cmap -> do
     case M.lookup k cmap of
         Nothing           -> do return Nothing
