@@ -86,9 +86,15 @@ draw (Ball x v) = translate x 0 (circle 20)
 
 -----------------------------------------------------------------------
 
-game = Game initial event step draw
+game = Game ginitial gevent gstep gdraw
 
-event (EventKey (Char '1') _ _ _) (Ball x v) = Ball x (v - 10)
-event (EventKey (Char '2') _ _ _) (Ball x v) = Ball x (v + 10)
-event _                           (Ball x v) = Ball x v
+ginitial :: Point
+ginitial = (0.0,0.0)
+
+gevent (EventMotion (x,y)) world = (x,y)
+gevent _                   world = world
+
+gstep time world = world
+
+gdraw (x,y) = translate x y (circle 50)
 
