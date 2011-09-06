@@ -366,7 +366,7 @@ function display(ctx, p, a, b, c, d, e, f)
     {
         // ThickCircle
         var r = p.popFloat();
-        var w = p.popFloat();
+        var w = Math.abs(p.popFloat());
         ctx.save();
         ctx.transform(a, b, c, d, e, f);
         if (w > 0) ctx.lineWidth = w;
