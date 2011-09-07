@@ -358,7 +358,7 @@ function display(ctx, p, a, b, c, d, e, f)
         ctx.save();
         ctx.transform(a, b, c, d, e, f);
         ctx.beginPath();
-        if (r > 0) ctx.arc(0, 0, r, 0, 2 * Math.PI);
+        if (r > 0) ctx.arc(0, 0, r, 0, 2 * Math.PI, false);
         ctx.restore();
         ctx.stroke();
     }
@@ -371,7 +371,7 @@ function display(ctx, p, a, b, c, d, e, f)
         ctx.transform(a, b, c, d, e, f);
         if (w > 0) ctx.lineWidth = w;
         ctx.beginPath();
-        if (r > 0) ctx.arc(0, 0, r, 0, 2 * Math.PI);
+        if (r > 0) ctx.arc(0, 0, r, 0, 2 * Math.PI, false);
         if (w > 0)
         {
             ctx.stroke();
