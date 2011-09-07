@@ -114,9 +114,11 @@
             <div id="editBox" style="position: absolute; top: 0px; bottom: 0px; left: 0px; right: 525px">
                 <textarea style="width: 100%; height: 100%" id="editor" name="source">Loading...</textarea>
             </div>
-            <input style="position: fixed; bottom: 20px; right: 80px" type="button" value="Run"  onclick="run()"/>
-            <input style="position: fixed; bottom: 20px; right: 20px" type="button" value="Stop" onclick="stop()"/>
             </form>
+        </div>
+        <div style="position: fixed; bottom: 20px; right: 20px">
+            <input type="button" value="Run"  onclick="run()"/>
+            <input type="button" value="Stop" onclick="stop()"/>
         </div>
     </body>
 </html>
