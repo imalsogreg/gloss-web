@@ -12,6 +12,7 @@
         <!--[if IE]>
         <script type="text/javascript" src="excanvas.js"></script>
         <![endif]-->
+        <script type="text/javascript" src="EventSource.js"></script>
         <displayScript/>
         <script type="text/javascript" src="draw.js"></script>
     </head>

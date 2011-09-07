@@ -92,7 +92,7 @@ eventStreamPull source = do
     modifyResponse (setContentType "text/event-stream")
     timeout <- getTimeoutAction
     modifyResponse $ setResponseBody $
-        generateM (timeout 1 >> fmap eventToBuilder source)
+        generateM (timeout 3600 >> fmap eventToBuilder source)
 
 
 {-|
