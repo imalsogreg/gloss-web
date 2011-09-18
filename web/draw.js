@@ -416,7 +416,7 @@ function display(ctx, p, a, b, c, d, e, f)
         var cr = p.popByte();
         var cg = p.popByte();
         var cb = p.popByte();
-        var ca = p.popByte();
+        var ca = p.popByte() / 255.0;
         var str = "rgba(" + cr + "," + cg + "," + cb + "," + ca + ")";
         ctx.save();
         ctx.strokeStyle = str;
