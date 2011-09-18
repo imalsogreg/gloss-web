@@ -490,14 +490,66 @@ function init()
 
     if (window.eventURI)
     {
-        var fireEvent = function(str)
+        var pendingEvents = [];
+        var pendingMotion = null;
+        var lastEvent = 0; // null indicates a pending timeout
+
+        /*
+         * Actually sends the events, after all the queuing and whatnot, it
+         * comes down to this.
+         */
+        var sendEvents = function()
         {
-            var xhr = new XMLHttpRequest();
-            xhr.open("POST", window.eventURI + str, true);
-            xhr.send(null);
+            for (var i = 0; i < pendingEvents.length; i++)
+            {
+                var xhr = new XMLHttpRequest();
+                xhr.open("POST", window.eventURI + pendingEvents[i], true);
+                xhr.send(null);
+            }
+
+            if (pendingMotion != null)
+            {
+                var xhr = new XMLHttpRequest();
+                xhr.open("POST", window.eventURI + pendingMotion, true);
+                xhr.send(null);
+            }
+
+            pendingEvents = [];
+            pendingMotion = null;
+        }
+
+        /*
+         * Schedules an event to be sent, at the next opportunity.  This
+         * respects the minimum event time of 100 ms.
+         */
+        var fireEvent = function(motion, str)
+        {
+            if (motion) pendingMotion = str;
+            else pendingEvents.push(str);
+
+            if (lastEvent == null) return;
+
+            var t = Date.now();
+            var target = lastEvent + 100;
+            if (t >= target)
+            {
+                console.log(t + ":" + str);
+                lastEvent = t;
+                sendEvents();
+            }
+            else
+            {
+                console.log(t + ":delay:" + str);
+                lastEvent = null;
+
+                window.setTimeout(function() {
+                    lastEvent = target;
+                    console.log(Date.now() + "sent:" + pendingMotion);
+                    sendEvents();
+                }, target - t);
+            }
         };
 
-        var lastMove = 0;
         var lastKeyCode = -1;
 
         var states = function(e)
@@ -574,7 +626,7 @@ function init()
         	var kname = getSpecialKey(e);
         	if (kname == null) return true;
 
-            fireEvent("&type=k&btn=" + kname + "&state=1&x=0&y=0" + states(e));
+            fireEvent(false, "&type=k&btn=" + kname + "&state=1&x=0&y=0" + states(e));
 
 			if (e.preventDefault) e.preventDefault();
 			if (e.stopPropogation) e.stopPropogation();
@@ -589,7 +641,7 @@ function init()
             cachedCodes[lastKeyCode.toString()] = String.fromCharCode(e.charCode);
 
         	var kname = encodeURIComponent(String.fromCharCode(e.charCode));
-            fireEvent("&type=k&btn=" + kname + "&state=1&x=0&y=0" + states(e));
+            fireEvent(false, "&type=k&btn=" + kname + "&state=1&x=0&y=0" + states(e));
 
             if (e.preventDefault) e.preventDefault();
             if (e.stopPropogation) e.stopPropogation();
@@ -613,7 +665,7 @@ function init()
 
             if (kname == null) return true;
 
-            fireEvent("&type=k&btn=" + kname + "&state=0&x=0&y=0" + states(e));
+            fireEvent(false, "&type=k&btn=" + kname + "&state=0&x=0&y=0" + states(e));
 
             if (e.preventDefault) e.preventDefault();
             if (e.stopPropogation) e.stopPropogation();
@@ -634,7 +686,7 @@ function init()
             else if (e.button == 2) btn = "rbtn";
             else return true;
 
-            fireEvent("&type=k&btn=" + btn + "&state=1&x=" + x + "&y=" + y + states(e));
+            fireEvent(false, "&type=k&btn=" + btn + "&state=1&x=" + x + "&y=" + y + states(e));
 
             if (e.preventDefault) e.preventDefault();
             if (e.stopPropogation) e.stopPropogation();
@@ -653,7 +705,7 @@ function init()
 			else if (e.button == 2) btn = "rbtn";
 			else return true;
 
-            fireEvent("&type=k&btn=" + btn + "&state=0&x=" + x + "&y=" + y + states(e));
+            fireEvent(false, "&type=k&btn=" + btn + "&state=0&x=" + x + "&y=" + y + states(e));
 
             if (e.preventDefault) e.preventDefault();
             if (e.stopPropogation) e.stopPropogation();
@@ -662,15 +714,11 @@ function init()
         };
 
         canvas.onmousemove = function(e) {
-            var t = Date.now();
-            if (lastMove > t - 100) return true;
-            lastMove = t;
-
             var box = canvas.getBoundingClientRect();
             var x = e.clientX - box.left - 250;
             var y = 250 - e.clientY + box.top;
 
-            fireEvent("&type=m&x=" + x + "&y=" + y);
+            fireEvent(true, "&type=m&x=" + x + "&y=" + y);
 
             if (e.preventDefault) e.preventDefault();
             if (e.stopPropogation) e.stopPropogation();
