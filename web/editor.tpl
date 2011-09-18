@@ -101,7 +101,7 @@
             <div>
                 <intro/>
                 Remember to import the <code>Graphics.Gloss</code> module.
-                <a href="http://hackage.haskell.org/packages/archive/gloss/latest/doc/html/Graphics-Gloss-Data-Picture.html">
+                <a href="http://hackage.haskell.org/package/gloss/">
                 Check here for things you can do</a>.  Have fun!
             </div>
             <hr style="clear:both">
