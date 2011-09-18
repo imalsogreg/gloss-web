@@ -533,18 +533,15 @@ function init()
             var target = lastEvent + 100;
             if (t >= target)
             {
-                console.log(t + ":" + str);
                 lastEvent = t;
                 sendEvents();
             }
             else
             {
-                console.log(t + ":delay:" + str);
                 lastEvent = null;
 
                 window.setTimeout(function() {
                     lastEvent = target;
-                    console.log(Date.now() + "sent:" + pendingMotion);
                     sendEvents();
                 }, target - t);
             }
