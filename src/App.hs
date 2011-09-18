@@ -2,6 +2,7 @@ module App where
 
 import Control.Concurrent.MVar
 import Data.Time
+import Data.Word
 import Graphics.Gloss
 import Snap.Types
 import Text.Templating.Heist
@@ -19,7 +20,7 @@ import ClientManager
 
 type Anim        = (UTCTime, Float -> Picture)
 type Sim         = MVar (UTCTime, Simulation)
-type RunningGame = MVar (UTCTime, Game)
+type RunningGame = MVar (UTCTime, Word64, Game)
 
 data App = App {
     appHeist               :: TemplateState Snap,

@@ -311,7 +311,7 @@ gameInBrowser app = do
 runGame :: App -> Game -> Snap ()
 runGame app game = do
     t     <- liftIO getCurrentTime
-    gvar  <- liftIO $ newMVar (t, game)
+    gvar  <- liftIO $ newMVar (t, 0, game)
     k     <- liftIO $ newClient (appGames app) gvar
     Just (b, t) <- renderTemplate
         (bindSplice "displayScript" (scrSplice k) (appHeist app))
@@ -335,7 +335,7 @@ gameStream app = do
                       =<< getParam "key"
     (var, touch)       <- maybe pass return
                       =<< liftIO (getClient (appGames app) (read (BC.unpack k)))
-    eventStreamPull $ modifyMVar var $ \(t0, game) -> do
+    eventStreamPull $ modifyMVar var $ \(t0, lastEvent, game) -> do
         touch
         t1 <- getCurrentTime
         let interval = t1 `diffUTCTime` t0
@@ -345,7 +345,7 @@ gameStream app = do
         let t = realToFrac (t1 `diffUTCTime` t0)
         let game' = advanceGame t game
         let pic  = gameToPicture game'
-        return ((t1, game'), ServerEvent Nothing Nothing [ base64 $ fromPicture pic ])
+        return ((t1, lastEvent, game'), ServerEvent Nothing Nothing [ base64 $ fromPicture pic ])
   where
     targetInterval = 0.1
 
@@ -373,20 +373,24 @@ gameEvent app = do
         ctrl  <- toKeyState =<< maybe pass return =<< getParam (pname "ctrl"  i)
         x     <- bsToNum    =<< maybe pass return =<< getParam (pname "x"     i)
         y     <- bsToNum    =<< maybe pass return =<< getParam (pname "y"     i)
-        dispatch $ EventKey k d (Modifiers shift ctrl alt) (x,y)
+        dispatch True  $ EventKey k d (Modifiers shift ctrl alt) (x,y)
 
     move i = do
         x <- bsToNum =<< maybe pass return =<< getParam (pname "x" i)
         y <- bsToNum =<< maybe pass return =<< getParam (pname "y" i)
-        dispatch $ EventMotion (x,y)
+        dispatch False $ EventMotion (x,y)
 
-    dispatch event = do
+    dispatch force event = do
         k                  <- maybe pass return
                           =<< getParam "key"
+        ts                 <- maybe pass (return . read . BC.unpack)
+                          =<< getParam "ts"
         (var, touch)       <- maybe pass return
                           =<< liftIO (getClient (appGames app) (read (BC.unpack k)))
-        liftIO $ modifyMVar var $
-            \ (t0, game) -> return ((t0, signalGame event game), ())
+        liftIO $ modifyMVar var $ \ (t0, prev, game) -> do
+            if force || ts >= prev
+                then return ((t0, ts  , signalGame event game), ())
+                else return ((t0, prev, game                 ), ())
 
     pname s i = B.append s (BC.pack (show i))
 

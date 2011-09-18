@@ -506,7 +506,7 @@ function init()
             pendingEvents = [];
             pendingMotion = null;
 
-            var pairs = ["n=" + evs.length];
+            var pairs = ["n=" + evs.length, "ts=" + Date.now()];
 
             for (var i = 0; i < evs.length; i++)
             {
