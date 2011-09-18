@@ -352,25 +352,32 @@ gameStream app = do
 
 gameEvent :: App -> Snap ()
 gameEvent app = do
-    typ <- maybe pass return =<< getParam "type"
-    case typ of
-        "k" -> key
-        "m" -> move
-        _   -> pass
+    nstr <- maybe pass return =<< getParam "n"
+    case reads (BC.unpack nstr) of
+        ((n,"") : _) -> mapM_ handle [0 .. n-1]
+        _            -> pass
+
   where
-    key  = do
-        k     <- toKey      =<< maybe pass return =<< getParam "btn"
-        d     <- toKeyState =<< maybe pass return =<< getParam "state"
-        shift <- toKeyState =<< maybe pass return =<< getParam "shift"
-        alt   <- toKeyState =<< maybe pass return =<< getParam "alt"
-        ctrl  <- toKeyState =<< maybe pass return =<< getParam "ctrl"
-        x     <- bsToNum    =<< maybe pass return =<< getParam "x"
-        y     <- bsToNum    =<< maybe pass return =<< getParam "y"
+    handle i = do
+        typ <- maybe pass return =<< getParam (pname "type" i)
+        case typ of
+            "k" -> key i
+            "m" -> move i
+            _   -> pass
+
+    key i = do
+        k     <- toKey      =<< maybe pass return =<< getParam (pname "btn"   i)
+        d     <- toKeyState =<< maybe pass return =<< getParam (pname "state" i)
+        shift <- toKeyState =<< maybe pass return =<< getParam (pname "shift" i)
+        alt   <- toKeyState =<< maybe pass return =<< getParam (pname "alt"   i)
+        ctrl  <- toKeyState =<< maybe pass return =<< getParam (pname "ctrl"  i)
+        x     <- bsToNum    =<< maybe pass return =<< getParam (pname "x"     i)
+        y     <- bsToNum    =<< maybe pass return =<< getParam (pname "y"     i)
         dispatch $ EventKey k d (Modifiers shift ctrl alt) (x,y)
 
-    move = do
-        x <- bsToNum =<< maybe pass return =<< getParam "x"
-        y <- bsToNum =<< maybe pass return =<< getParam "y"
+    move i = do
+        x <- bsToNum =<< maybe pass return =<< getParam (pname "x" i)
+        y <- bsToNum =<< maybe pass return =<< getParam (pname "y" i)
         dispatch $ EventMotion (x,y)
 
     dispatch event = do
@@ -381,6 +388,7 @@ gameEvent app = do
         liftIO $ modifyMVar var $
             \ (t0, game) -> return ((t0, signalGame event game), ())
 
+    pname s i = B.append s (BC.pack (show i))
 
 bsToNum :: ByteString -> Snap Float
 bsToNum bs = case reads (BC.unpack bs) of

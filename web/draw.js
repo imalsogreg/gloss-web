@@ -500,32 +500,40 @@ function init()
          */
         var sendEvents = function()
         {
-            for (var i = 0; i < pendingEvents.length; i++)
-            {
-                var xhr = new XMLHttpRequest();
-                xhr.open("POST", window.eventURI + pendingEvents[i], true);
-                xhr.send(null);
-            }
-
-            if (pendingMotion != null)
-            {
-                var xhr = new XMLHttpRequest();
-                xhr.open("POST", window.eventURI + pendingMotion, true);
-                xhr.send(null);
-            }
+            var evs = pendingEvents;
+            if (pendingMotion != null) evs.push(pendingMotion);
 
             pendingEvents = [];
             pendingMotion = null;
+
+            var pairs = ["n=" + evs.length];
+
+            for (var i = 0; i < evs.length; i++)
+            {
+                var ev = evs[i];
+                for (var nm in ev)
+                {
+                    if (!ev.hasOwnProperty(nm))      continue;
+                    if (typeof ev[nm] == "function") continue;
+                    var value = ev[nm].toString();
+                    pairs.push(encodeURIComponent(nm + i.toString()) + "=" + encodeURIComponent(value));
+                }
+            }
+
+            var xhr = new XMLHttpRequest();
+            xhr.open("POST", window.eventURI, true);
+            xhr.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+            xhr.send(pairs.join('&'));
         }
 
         /*
          * Schedules an event to be sent, at the next opportunity.  This
          * respects the minimum event time of 100 ms.
          */
-        var fireEvent = function(motion, str)
+        var fireEvent = function(motion, ev)
         {
-            if (motion) pendingMotion = str;
-            else pendingEvents.push(str);
+            if (motion) pendingMotion = ev;
+            else pendingEvents.push(ev);
 
             if (lastEvent == null) return;
 
@@ -549,12 +557,13 @@ function init()
 
         var lastKeyCode = -1;
 
-        var states = function(e)
+        var states = function(e, obj)
         {
-            var s = e.shiftKey ? "1" : "0";
-            var a = e.altKey   ? "1" : "0";
-            var c = e.ctrlKey  ? "1" : "0";
-            return "&shift=" + s + "&alt=" + a + "&ctrl=" + c;
+            obj.shift = e.shiftKey ? 1 : 0;
+            obj.alt   = e.altKey   ? 1 : 0;
+            obj.ctrl  = e.ctrlKey  ? 1 : 0;
+
+            return obj;
         };
 
         /*
@@ -623,7 +632,7 @@ function init()
         	var kname = getSpecialKey(e);
         	if (kname == null) return true;
 
-            fireEvent(false, "&type=k&btn=" + kname + "&state=1&x=0&y=0" + states(e));
+            fireEvent(false, states(e, { type:"k", btn: kname, state:1, x:0, y:0 }));
 
 			if (e.preventDefault) e.preventDefault();
 			if (e.stopPropogation) e.stopPropogation();
@@ -636,9 +645,9 @@ function init()
             if (e.charCode == 0) return true;
 
             cachedCodes[lastKeyCode.toString()] = String.fromCharCode(e.charCode);
-
         	var kname = encodeURIComponent(String.fromCharCode(e.charCode));
-            fireEvent(false, "&type=k&btn=" + kname + "&state=1&x=0&y=0" + states(e));
+
+            fireEvent(false, states(e, { type:"k", btn: kname, state:1, x:0, y:0 }));
 
             if (e.preventDefault) e.preventDefault();
             if (e.stopPropogation) e.stopPropogation();
@@ -662,7 +671,7 @@ function init()
 
             if (kname == null) return true;
 
-            fireEvent(false, "&type=k&btn=" + kname + "&state=0&x=0&y=0" + states(e));
+            fireEvent(false, states(e, { type:"k", btn: kname, state:0, x:0, y:0 }));
 
             if (e.preventDefault) e.preventDefault();
             if (e.stopPropogation) e.stopPropogation();
@@ -683,7 +692,7 @@ function init()
             else if (e.button == 2) btn = "rbtn";
             else return true;
 
-            fireEvent(false, "&type=k&btn=" + btn + "&state=1&x=" + x + "&y=" + y + states(e));
+            fireEvent(false, states(e, { type:"k", btn: btn, state:1, x:x, y:y }));
 
             if (e.preventDefault) e.preventDefault();
             if (e.stopPropogation) e.stopPropogation();
@@ -702,7 +711,7 @@ function init()
 			else if (e.button == 2) btn = "rbtn";
 			else return true;
 
-            fireEvent(false, "&type=k&btn=" + btn + "&state=0&x=" + x + "&y=" + y + states(e));
+            fireEvent(false, states(e, { type:"k", btn: btn, state:0, x:x, y:y }));
 
             if (e.preventDefault) e.preventDefault();
             if (e.stopPropogation) e.stopPropogation();
@@ -715,7 +724,7 @@ function init()
             var x = e.clientX - box.left - 250;
             var y = 250 - e.clientY + box.top;
 
-            fireEvent(true, "&type=m&x=" + x + "&y=" + y);
+            fireEvent(true, states(e, { type:"m", x:x, y:y }));
 
             if (e.preventDefault) e.preventDefault();
             if (e.stopPropogation) e.stopPropogation();
