@@ -9,6 +9,7 @@ import Control.Monad.Trans
 import Data.Aeson
 import Data.Aeson.Encode
 import Data.IORef
+import Data.Monoid
 import Data.Time
 import Graphics.Gloss
 import Graphics.Gloss.Interface.Game
@@ -236,7 +237,7 @@ animateStream app = do
     ((t0, f), touch)  <- maybe pass return
                       =<< liftIO (getClient (appAnimations app) (read (BC.unpack k)))
     tv                 <- liftIO (newIORef =<< getCurrentTime)
-    eventStreamPull $ do
+    source <- cullDuplicates $ do
         touch
         t1 <- getCurrentTime
         t' <- readIORef tv
@@ -246,7 +247,8 @@ animateStream app = do
         t1 <- getCurrentTime
         writeIORef tv t1
         let t = realToFrac (t1 `diffUTCTime` t0)
-        return $ ServerEvent Nothing Nothing [ base64 $ fromPicture $ f t ]
+        return (f t)
+    eventStreamPull (fmap pictureEvent source)
   where
     targetInterval = 0.1
 
@@ -284,7 +286,7 @@ simulateStream app = do
                       =<< getParam "key"
     (var, touch)       <- maybe pass return
                       =<< liftIO (getClient (appSimulations app) (read (BC.unpack k)))
-    eventStreamPull $ modifyMVar var $ \(t0, sim) -> do
+    source <- cullDuplicates $ modifyMVar var $ \(t0, sim) -> do
         touch
         t1 <- getCurrentTime
         let interval = t1 `diffUTCTime` t0
@@ -294,7 +296,8 @@ simulateStream app = do
         let t = realToFrac (t1 `diffUTCTime` t0)
         let sim' = advanceSimulation t sim
         let pic  = simulationToPicture sim'
-        return ((t1, sim'), ServerEvent Nothing Nothing [ base64 $ fromPicture pic ])
+        return ((t1, sim'), pic)
+    eventStreamPull (fmap pictureEvent source)
   where
     targetInterval = 0.1
 
@@ -335,7 +338,7 @@ gameStream app = do
                       =<< getParam "key"
     (var, touch)       <- maybe pass return
                       =<< liftIO (getClient (appGames app) (read (BC.unpack k)))
-    eventStreamPull $ modifyMVar var $ \(t0, lastEvent, game) -> do
+    source <- cullDuplicates $ modifyMVar var $ \(t0, prev, game) -> do
         touch
         t1 <- getCurrentTime
         let interval = t1 `diffUTCTime` t0
@@ -345,7 +348,8 @@ gameStream app = do
         let t = realToFrac (t1 `diffUTCTime` t0)
         let game' = advanceGame t game
         let pic  = gameToPicture game'
-        return ((t1, lastEvent, game'), ServerEvent Nothing Nothing [ base64 $ fromPicture pic ])
+        return ((t1, prev, game'), pic)
+    eventStreamPull (fmap pictureEvent source)
   where
     targetInterval = 0.1
 
@@ -439,6 +443,23 @@ toKey bs = case bs of
     "mwdn"               -> return (MouseButton WheelDown)
     _ | B.length bs == 1 -> return (Char (BC.head bs))
       | otherwise        -> pass
+
+
+cullDuplicates :: (Eq a, MonadIO m) => IO a -> m (IO (Maybe a))
+cullDuplicates source = do
+    oldVar <- liftIO (newMVar Nothing)
+    return $ do
+        new <- source
+        old <- swapMVar oldVar (Just new)
+        return $ case old of
+            Nothing            -> Just new
+            Just o | o == new  -> Nothing
+                   | otherwise -> Just new
+
+
+pictureEvent :: Maybe Picture -> ServerEvent
+pictureEvent Nothing  = CommentEvent mempty
+pictureEvent (Just p) = ServerEvent Nothing Nothing [ base64 $ fromPicture p ]
 
 
 errors :: App -> [String] -> Snap ()
