@@ -15,7 +15,7 @@ import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Base64 as B64
 
 import GlossAdapters
-import ClientManager
+import CacheMap
 
 
 type Anim        = (UTCTime, Float -> Picture)
@@ -24,25 +24,25 @@ type RunningGame = MVar (UTCTime, Word64, Game)
 
 data App = App {
     appHeist               :: TemplateState Snap,
-    appAnimations          :: ClientManager Anim,
-    appSimulations         :: ClientManager Sim,
-    appGames               :: ClientManager RunningGame,
-    appCompiledPictures    :: MVar (Map ByteString (Either [String] Picture)),
-    appCompiledAnimations  :: MVar (Map ByteString (Either [String] (Float -> Picture))),
-    appCompiledSimulations :: MVar (Map ByteString (Either [String] Simulation)),
-    appCompiledGames       :: MVar (Map ByteString (Either [String] Game))
+    appAnimations          :: CacheMap Int Anim,
+    appSimulations         :: CacheMap Int Sim,
+    appGames               :: CacheMap Int RunningGame,
+    appCompiledPictures    :: CacheMap ByteString (Either [String] Picture),
+    appCompiledAnimations  :: CacheMap ByteString (Either [String] (Float -> Picture)),
+    appCompiledSimulations :: CacheMap ByteString (Either [String] Simulation),
+    appCompiledGames       :: CacheMap ByteString (Either [String] Game)
     }
 
 
 newApp :: TemplateState Snap -> IO App
 newApp heist = do
-    animMgr     <- newClientManager
-    simMgr      <- newClientManager
-    gameMgr     <- newClientManager
-    cpic        <- newMVar M.empty
-    canim       <- newMVar M.empty
-    csim        <- newMVar M.empty
-    cgame       <- newMVar M.empty
+    animMgr     <- newCacheMap
+    simMgr      <- newCacheMap
+    gameMgr     <- newCacheMap
+    cpic        <- newCacheMap
+    canim       <- newCacheMap
+    csim        <- newCacheMap
+    cgame       <- newCacheMap
     return (App heist animMgr simMgr gameMgr cpic canim csim cgame)
 
 

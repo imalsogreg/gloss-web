@@ -35,6 +35,7 @@ Executable gloss-web
                      heist,
                      mtl,
                      process,
+                     PSQueue,
                      random,
                      snap-core,
                      snap-server,

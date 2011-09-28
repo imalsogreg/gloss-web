@@ -35,6 +35,7 @@ import qualified HscTypes   as GHC
 import qualified DynFlags   as GHC
 
 import App
+import CacheMap
 import GlossAdapters
 import ProtectHandlers
 
@@ -95,20 +96,17 @@ getGame app src = do
     is the cache, which should be different for different expected variables
     and types
 -}
-getCompileResult :: MVar (Map ByteString (Either [String] t))
+getCompileResult :: CacheMap ByteString (Either [String] t)
                  -> String
                  -> String
                  -> ByteString
                  -> IO (Either [String] t)
-getCompileResult var vname tname src = modifyMVar var $ \m -> do
-        let digest = hash src
-        case M.lookup digest m of
-            Nothing  -> do
-                let fn = "tmp/" ++ base64FileName digest ++ ".hs"
-                B.writeFile fn src
-                res <- compile vname tname fn
-                return (M.insert digest res m, res)
-            Just res -> return (m, res)
+getCompileResult cmap vname tname src = do
+    let digest = hash src
+    cache cmap digest $ do
+        let fn = "tmp/" ++ base64FileName digest ++ ".hs"
+        B.writeFile fn src
+        compile vname tname fn
 
 
 {-|

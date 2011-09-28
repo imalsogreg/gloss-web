@@ -30,7 +30,7 @@ import qualified Data.Text.Encoding as T
 
 import App
 import EventStream
-import ClientManager
+import CacheMap
 import Source
 import Serialize
 import GlossAdapters
@@ -216,7 +216,8 @@ animate :: App -> (Float -> Picture) -> Snap ()
 animate app f = do
     t <- liftIO getCurrentTime
     let anim = (t, f)
-    k <- liftIO $ newClient (appAnimations app) anim
+    k <- liftIO $ cacheNew (appAnimations app) anim
+    liftIO $ keepAlive (appAnimations app) k 30
     Just (b, t) <- renderTemplate
         (bindSplice "displayScript" (scrSplice k) (appHeist app))
         "display"
@@ -232,13 +233,11 @@ animate app f = do
 
 animateStream :: App -> Snap ()
 animateStream app = do
-    k                  <- maybe pass return
-                      =<< getParam "key"
-    ((t0, f), touch)  <- maybe pass return
-                      =<< liftIO (getClient (appAnimations app) (read (BC.unpack k)))
-    tv                 <- liftIO (newIORef =<< getCurrentTime)
-    source <- cullDuplicates $ do
-        touch
+    k       <- fmap (read . BC.unpack) $ maybe pass return =<< getParam "key"
+    (t0, f) <- maybe pass return =<< liftIO (getCached (appAnimations app) k)
+    tv      <- liftIO (newIORef =<< getCurrentTime)
+    source  <- cullDuplicates $ do
+        keepAlive (appAnimations app) k 30
         t1 <- getCurrentTime
         t' <- readIORef tv
         let interval = t1 `diffUTCTime` t'
@@ -266,7 +265,8 @@ simulate :: App -> Simulation -> Snap ()
 simulate app sim = do
     t     <- liftIO getCurrentTime
     simul <- liftIO $ newMVar (t, sim)
-    k     <- liftIO $ newClient (appSimulations app) simul
+    k     <- liftIO $ cacheNew (appSimulations app) simul
+    liftIO $ keepAlive (appSimulations app) k 30
     Just (b, t) <- renderTemplate
         (bindSplice "displayScript" (scrSplice k) (appHeist app))
         "display"
@@ -282,12 +282,10 @@ simulate app sim = do
 
 simulateStream :: App -> Snap ()
 simulateStream app = do
-    k                  <- maybe pass return
-                      =<< getParam "key"
-    (var, touch)       <- maybe pass return
-                      =<< liftIO (getClient (appSimulations app) (read (BC.unpack k)))
+    k      <- fmap (read . BC.unpack) $ maybe pass return =<< getParam "key"
+    var    <- maybe pass return =<< liftIO (getCached (appSimulations app) k)
     source <- cullDuplicates $ modifyMVar var $ \(t0, sim) -> do
-        touch
+        keepAlive (appSimulations app) k 30
         t1 <- getCurrentTime
         let interval = t1 `diffUTCTime` t0
         when (interval < targetInterval) $
@@ -315,7 +313,8 @@ runGame :: App -> Game -> Snap ()
 runGame app game = do
     t     <- liftIO getCurrentTime
     gvar  <- liftIO $ newMVar (t, 0, game)
-    k     <- liftIO $ newClient (appGames app) gvar
+    k     <- liftIO $ cacheNew (appGames app) gvar
+    liftIO $ keepAlive (appGames app) k 30
     Just (b, t) <- renderTemplate
         (bindSplice "displayScript" (scrSplice k) (appHeist app))
         "display"
@@ -334,12 +333,10 @@ runGame app game = do
 
 gameStream :: App -> Snap ()
 gameStream app = do
-    k                  <- maybe pass return
-                      =<< getParam "key"
-    (var, touch)       <- maybe pass return
-                      =<< liftIO (getClient (appGames app) (read (BC.unpack k)))
+    k      <- fmap (read . BC.unpack) $ maybe pass return =<< getParam "key"
+    var    <- maybe pass return =<< liftIO (getCached (appGames app) k)
     source <- cullDuplicates $ modifyMVar var $ \(t0, prev, game) -> do
-        touch
+        keepAlive (appGames app) k 30
         t1 <- getCurrentTime
         let interval = t1 `diffUTCTime` t0
         when (interval < targetInterval) $
@@ -385,12 +382,9 @@ gameEvent app = do
         dispatch False $ EventMotion (x,y)
 
     dispatch force event = do
-        k                  <- maybe pass return
-                          =<< getParam "key"
-        ts                 <- maybe pass (return . read . BC.unpack)
-                          =<< getParam "ts"
-        (var, touch)       <- maybe pass return
-                          =<< liftIO (getClient (appGames app) (read (BC.unpack k)))
+        k   <- fmap (read . BC.unpack) $ maybe pass return =<< getParam "key"
+        ts  <- fmap (read . BC.unpack) $ maybe pass return =<< getParam "ts"
+        var <- maybe pass return =<< liftIO (getCached (appGames app) k)
         liftIO $ modifyMVar var $ \ (t0, prev, game) -> do
             if force || ts >= prev
                 then return ((t0, ts  , signalGame event game), ())
