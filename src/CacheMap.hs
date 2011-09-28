@@ -1,5 +1,3 @@
-{-# LANGUAGE TupleSections #-}
-
 {-|
     Implementation of a map that caches values but does not keep them
     indefinitely.  This is not referentially transparent, so the map lives in
