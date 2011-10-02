@@ -43,21 +43,21 @@ import ProtectHandlers
 
 import ProfileSubst
 
-getPicture :: App -> ByteString -> IO (Either [String] Picture)
+getPicture :: App -> ByteString -> IO (Err Picture)
 getPicture _ _ = return (Right picture)
 
-getAnimation :: App -> ByteString -> IO (Either [String] (Float -> Picture))
+getAnimation :: App -> ByteString -> IO (Err (Float -> Picture))
 getAnimation _ _ = return (Right animation)
 
-getSimulation :: App -> ByteString -> IO (Either [String] Simulation)
+getSimulation :: App -> ByteString -> IO (Err Simulation)
 getSimulation _ _ = return (Right simulation)
 
-getGame :: App -> ByteString -> IO (Either [String] Game)
+getGame :: App -> ByteString -> IO (Err Game)
 getGame _ _ = return (Right game)
 
 #else
 
-getPicture :: App -> ByteString -> IO (Either [String] Picture)
+getPicture :: App -> ByteString -> IO (Err Picture)
 getPicture app src = do
     getCompileResult (appCompiledPictures app)
                      "picture"
@@ -65,7 +65,7 @@ getPicture app src = do
                      src
 
 
-getAnimation :: App -> ByteString -> IO (Either [String] (Float -> Picture))
+getAnimation :: App -> ByteString -> IO (Err (Float -> Picture))
 getAnimation app src = do
     getCompileResult (appCompiledAnimations app)
                      "animation"
@@ -73,7 +73,7 @@ getAnimation app src = do
                      src
 
 
-getSimulation :: App -> ByteString -> IO (Either [String] Simulation)
+getSimulation :: App -> ByteString -> IO (Err Simulation)
 getSimulation app src = do
     getCompileResult (appCompiledSimulations app)
                      "Simulation initial step draw"
@@ -81,7 +81,7 @@ getSimulation app src = do
                      src
 
 
-getGame :: App -> ByteString -> IO (Either [String] Game)
+getGame :: App -> ByteString -> IO (Err Game)
 getGame app src = do
     getCompileResult (appCompiledGames app)
                      "Game initial event step draw"
@@ -96,11 +96,11 @@ getGame app src = do
     is the cache, which should be different for different expected variables
     and types
 -}
-getCompileResult :: CacheMap ByteString (Either [String] t)
+getCompileResult :: CacheMap ByteString (Err t)
                  -> String
                  -> String
                  -> ByteString
-                 -> IO (Either [String] t)
+                 -> IO (Err t)
 getCompileResult cmap vname tname src = do
     let digest = hash src
     r <- cache cmap digest $ do
@@ -117,7 +117,7 @@ getCompileResult cmap vname tname src = do
     it's a bit of tricky trial-and-error to handle them all uniformly, so
     this function abstracts that.
 -}
-doWithErrors :: GHC.Ghc (Maybe a) -> IO (Either [String] a)
+doWithErrors :: GHC.Ghc (Maybe a) -> IO (Err a)
 doWithErrors action = do
     codeErrors <- newIORef []
     protectHandlers $ catch (wrapper codeErrors) $ \ (e :: SomeException) -> do
@@ -153,7 +153,7 @@ doWithErrors action = do
     with the given type.  If the type passed in doesn't match the way the
     result is used, the server process will likely segfault.
 -}
-compile :: String -> String -> FilePath -> IO (Either [String] t)
+compile :: String -> String -> FilePath -> IO (Err t)
 compile vname tname fn = doWithErrors $ do
     dflags <- GHC.getSessionDynFlags
     let dflags' = dflags {

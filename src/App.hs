@@ -18,19 +18,21 @@ import GlossAdapters
 import CacheMap
 
 
-type Anim        = (UTCTime, Float -> Picture)
-type Sim         = MVar (UTCTime, Simulation)
-type RunningGame = MVar (UTCTime, Word64, Game)
+type Anim        = (Err (Float -> Picture), UTCTime, Float -> Picture)
+type Sim         = (Err Simulation, MVar (UTCTime, Simulation))
+type RunningGame = (Err Game, MVar (UTCTime, Word64, Game))
+
+type Err a = Either [String] a
 
 data App = App {
     appHeist               :: TemplateState Snap,
     appAnimations          :: CacheMap Int Anim,
     appSimulations         :: CacheMap Int Sim,
     appGames               :: CacheMap Int RunningGame,
-    appCompiledPictures    :: CacheMap ByteString (Either [String] Picture),
-    appCompiledAnimations  :: CacheMap ByteString (Either [String] (Float -> Picture)),
-    appCompiledSimulations :: CacheMap ByteString (Either [String] Simulation),
-    appCompiledGames       :: CacheMap ByteString (Either [String] Game)
+    appCompiledPictures    :: CacheMap ByteString (Err Picture),
+    appCompiledAnimations  :: CacheMap ByteString (Err (Float -> Picture)),
+    appCompiledSimulations :: CacheMap ByteString (Err Simulation),
+    appCompiledGames       :: CacheMap ByteString (Err Game)
     }
 
 
