@@ -103,10 +103,12 @@ getCompileResult :: CacheMap ByteString (Either [String] t)
                  -> IO (Either [String] t)
 getCompileResult cmap vname tname src = do
     let digest = hash src
-    cache cmap digest $ do
+    r <- cache cmap digest $ do
         let fn = "tmp/" ++ base64FileName digest ++ ".hs"
         B.writeFile fn src
         compile vname tname fn
+    keepAlive cmap digest 30
+    return r
 
 
 {-|
