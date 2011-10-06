@@ -160,7 +160,6 @@ compile vname tname fn = doWithErrors $ do
         GHC.ghcMode = GHC.CompManager,
         GHC.ghcLink = GHC.LinkInMemory,
         GHC.hscTarget = GHC.HscInterpreted,
-        GHC.optLevel = 2,
         GHC.safeHaskell = GHC.Sf_Safe,
         GHC.packageFlags = [GHC.TrustPackage "gloss",
                             GHC.ExposePackage "gloss-web-adapters" ]
