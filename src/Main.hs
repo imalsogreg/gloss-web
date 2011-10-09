@@ -23,6 +23,7 @@ import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as LB
+import qualified Data.ByteString.Base64 as B64
 
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -179,19 +180,26 @@ game app = do
         ]]
 
 
+getSource :: Snap (Either ByteString ByteString)
+getSource = (maybe pass (return . Right) =<< getParam "source")
+    <|> (maybe pass (return . Left . B64.decodeLenient)  =<< getParam "digest")
+
+
 displayInBrowser :: App -> Snap ()
 displayInBrowser app = do
-    src <- maybe pass return =<< getParam "source"
-    res <- liftIO $ getPicture app src
+    src <- getSource
+    (dig, res) <- liftIO $ getPicture app src
     case res of
         Left errs -> errors app errs
-        Right pic -> display app pic
+        Right pic -> display app dig pic
 
 
-display :: App -> Picture -> Snap ()
-display app pic = do
+display :: App -> ByteString -> Picture -> Snap ()
+display app dig pic = do
     Just (b, t) <- renderTemplate
-        (bindSplice "displayScript" (scrSplice pic) (appHeist app))
+        (     bindSplice "displayScript" (scrSplice pic)
+            $ bindSplice "share" (shareLink "displayInBrowser" dig)
+            $ appHeist app)
         "display"
     modifyResponse (setContentType t)
     writeBuilder b
@@ -205,21 +213,23 @@ display app pic = do
 
 animateInBrowser :: App -> Snap ()
 animateInBrowser app = do
-    src <- maybe pass return =<< getParam "source"
-    res <- liftIO $ getAnimation app src
+    src <- getSource
+    (dig, res) <- liftIO $ getAnimation app src
     case res of
         Left errs -> errors app errs
-        Right pic -> animate app res pic
+        Right pic -> animate app dig res pic
 
 
-animate :: App -> Err (Float -> Picture) -> (Float -> Picture) -> Snap ()
-animate app e f = do
+animate :: App -> ByteString -> Err (Float -> Picture) -> (Float -> Picture) -> Snap ()
+animate app dig e f = do
     t <- liftIO getCurrentTime
     let anim = (e, t, f)
     k <- liftIO $ cacheNew (appAnimations app) anim
     liftIO $ keepAlive (appAnimations app) k 30
     Just (b, t) <- renderTemplate
-        (bindSplice "displayScript" (scrSplice k) (appHeist app))
+        (     bindSplice "displayScript" (scrSplice k)
+            $ bindSplice "share" (shareLink "animateInBrowser" dig)
+            $ appHeist app)
         "display"
     modifyResponse (setContentType t)
     writeBuilder b
@@ -254,21 +264,23 @@ animateStream app = do
 
 simulateInBrowser :: App -> Snap ()
 simulateInBrowser app = do
-    src <- maybe pass return =<< getParam "source"
-    res <- liftIO $ getSimulation app src
+    src <- getSource
+    (dig, res) <- liftIO $ getSimulation app src
     case res of
         Left errs -> errors app errs
-        Right pic -> simulate app res pic
+        Right pic -> simulate app dig res pic
 
 
-simulate :: App -> Err Simulation -> Simulation -> Snap ()
-simulate app e sim = do
+simulate :: App -> ByteString -> Err Simulation -> Simulation -> Snap ()
+simulate app dig e sim = do
     t     <- liftIO getCurrentTime
     simul <- liftIO $ newMVar (t, sim)
     k     <- liftIO $ cacheNew (appSimulations app) (e, simul)
     liftIO $ keepAlive (appSimulations app) k 30
     Just (b, t) <- renderTemplate
-        (bindSplice "displayScript" (scrSplice k) (appHeist app))
+        (     bindSplice "displayScript" (scrSplice k)
+            $ bindSplice "share" (shareLink "simulateInBrowser" dig)
+            $ appHeist app)
         "display"
     modifyResponse (setContentType t)
     writeBuilder b
@@ -302,21 +314,23 @@ simulateStream app = do
 
 gameInBrowser :: App -> Snap ()
 gameInBrowser app = do
-    src <- maybe pass return =<< getParam "source"
-    res <- liftIO $ getGame app src
+    src <- getSource
+    (dig, res) <- liftIO $ getGame app src
     case res of
         Left errs -> errors app errs
-        Right pic -> runGame app res pic
+        Right pic -> runGame app dig res pic
 
 
-runGame :: App -> Err Game -> Game -> Snap ()
-runGame app e game = do
+runGame :: App -> ByteString -> Err Game -> Game -> Snap ()
+runGame app dig e game = do
     t     <- liftIO getCurrentTime
     gvar  <- liftIO $ newMVar (t, 0, game)
     k     <- liftIO $ cacheNew (appGames app) (e, gvar)
     liftIO $ keepAlive (appGames app) k 30
     Just (b, t) <- renderTemplate
-        (bindSplice "displayScript" (scrSplice k) (appHeist app))
+        (     bindSplice "displayScript" (scrSplice k)
+            $ bindSplice "share" (shareLink "gameInBrowser" dig)
+            $ appHeist app)
         "display"
     modifyResponse (setContentType t)
     writeBuilder b
@@ -467,4 +481,9 @@ errors app errs = do
     errSplice errs = return [Element "ul" []
         (map (\s -> Element "li" [] [
                 Element "pre" [] [TextNode (T.pack s) ]]) errs)]
+
+
+shareLink handler digest = return [ TextNode link ]
+    where link = "/" `mappend` handler `mappend` "?digest="
+            `mappend` (T.decodeUtf8 $ urlEncode $ B64.encode digest)
 

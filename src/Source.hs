@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP                 #-}
 {-# LANGUAGE MagicHash           #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections       #-}
 
 module Source where
 
@@ -13,6 +14,7 @@ import Crypto.Hash.MD5
 import Data.IORef
 import GHC.Exts (unsafeCoerce#)
 import Graphics.Gloss
+import System.Directory
 import System.FilePath
 import System.Random
 
@@ -43,21 +45,21 @@ import ProtectHandlers
 
 import ProfileSubst
 
-getPicture :: App -> ByteString -> IO (Err Picture)
-getPicture _ _ = return (Right picture)
+getPicture :: App -> Either ByteString ByteString -> IO (ByteString, Err Picture)
+getPicture _ _ = return (B.empty, Right picture)
 
-getAnimation :: App -> ByteString -> IO (Err (Float -> Picture))
-getAnimation _ _ = return (Right animation)
+getAnimation :: App -> Either ByteString ByteString -> IO (ByteString, Err (Float -> Picture))
+getAnimation _ _ = return (B.empty, Right animation)
 
-getSimulation :: App -> ByteString -> IO (Err Simulation)
-getSimulation _ _ = return (Right simulation)
+getSimulation :: App -> Either ByteString ByteString -> IO (ByteString, Err Simulation)
+getSimulation _ _ = return (B.empty, Right simulation)
 
-getGame :: App -> ByteString -> IO (Err Game)
-getGame _ _ = return (Right game)
+getGame :: App -> Either ByteString ByteString -> IO (ByteString, Err Game)
+getGame _ _ = return (B.empty, Right game)
 
 #else
 
-getPicture :: App -> ByteString -> IO (Err Picture)
+getPicture :: App -> Either ByteString ByteString -> IO (ByteString, Err Picture)
 getPicture app src = do
     getCompileResult (appCompiledPictures app)
                      "picture"
@@ -65,7 +67,7 @@ getPicture app src = do
                      src
 
 
-getAnimation :: App -> ByteString -> IO (Err (Float -> Picture))
+getAnimation :: App -> Either ByteString ByteString -> IO (ByteString, Err (Float -> Picture))
 getAnimation app src = do
     getCompileResult (appCompiledAnimations app)
                      "animation"
@@ -73,7 +75,7 @@ getAnimation app src = do
                      src
 
 
-getSimulation :: App -> ByteString -> IO (Err Simulation)
+getSimulation :: App -> Either ByteString ByteString -> IO (ByteString, Err Simulation)
 getSimulation app src = do
     getCompileResult (appCompiledSimulations app)
                      "Simulation initial step draw"
@@ -81,7 +83,7 @@ getSimulation app src = do
                      src
 
 
-getGame :: App -> ByteString -> IO (Err Game)
+getGame :: App -> Either ByteString ByteString -> IO (ByteString, Err Game)
 getGame app src = do
     getCompileResult (appCompiledGames app)
                      "Game initial event step draw"
@@ -99,16 +101,30 @@ getGame app src = do
 getCompileResult :: CacheMap ByteString (Err t)
                  -> String
                  -> String
-                 -> ByteString
-                 -> IO (Err t)
-getCompileResult cmap vname tname src = do
-    let digest = hash src
-    r <- cache cmap digest $ do
-        let fn = "tmp/" ++ base64FileName digest ++ ".hs"
-        B.writeFile fn src
-        compile vname tname fn
+                 -> Either ByteString ByteString
+                 -> IO (ByteString, Err t)
+getCompileResult cmap vname tname inp = do
+    r <- case source of
+        Nothing -> do
+            mr <- getCached cmap digest
+            case mr of
+                Nothing -> do
+                    e <- doesFileExist fname
+                    if e then cache cmap digest $ compile vname tname fname
+                         else return (Left [ "Program not found" ])
+                Just r  -> return r
+        Just src -> do
+            cache cmap digest $ do
+                B.writeFile fname src
+                compile vname tname fname
     keepAlive cmap digest 30
-    return r
+    return (digest, r)
+  where
+    digest = case inp of Left digest -> digest
+                         Right src   -> hash src
+    source = case inp of Left _      -> Nothing
+                         Right src   -> Just src
+    fname  = "tmp/" ++ base64FileName digest ++ ".hs"
 
 
 {-|
