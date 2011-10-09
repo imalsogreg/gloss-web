@@ -16,6 +16,7 @@ import Graphics.Gloss.Interface.Game
 import Snap.Http.Server
 import Snap.Types
 import Snap.Util.FileServe
+import System.Random
 import Text.Templating.Heist
 import Text.XmlHtml
 
@@ -136,7 +137,7 @@ sim app = do
         TextNode "var sourceCookie = 'simulateSource';",
         TextNode "var initialSource = 'import Graphics.Gloss\\n\\n",
         TextNode "data BallState = BallAt Float Float\\n",
-        TextNode "initial = BallAt 100 0\\n",
+        TextNode "initial _ = BallAt 100 0\\n",
         TextNode "step _ t (BallAt x v) = BallAt (x+v*t) (0.99*v-x*t)\\n",
         TextNode "draw     (BallAt x v) = translate x x (circle 20)';"
         ]]
@@ -171,8 +172,7 @@ game app = do
         TextNode "var sourceCookie = 'gameSource';",
         TextNode "var initialSource = 'import Graphics.Gloss\\n",
         TextNode "import Graphics.Gloss.Interface.Game\\n\\n",
-        TextNode "initial :: Point\\n",
-        TextNode "initial = (0.0,0.0)\\n\\n",
+        TextNode "initial _ = (0.0,0.0) :: Point\\n\\n",
         TextNode "event (EventMotion (x,y)) world = (x,y)\\n",
         TextNode "event _                   world = world\\n\\n",
         TextNode "step time world = world\\n\\n",
@@ -271,10 +271,15 @@ simulateInBrowser app = do
         Right pic -> simulate app dig res pic
 
 
-simulate :: App -> ByteString -> Err Simulation -> Simulation -> Snap ()
+simulate :: App
+         -> ByteString
+         -> Err (StdGen -> Simulation)
+         -> (StdGen -> Simulation)
+         -> Snap ()
 simulate app dig e sim = do
     t     <- liftIO getCurrentTime
-    simul <- liftIO $ newMVar (t, sim)
+    sim0  <- sim <$> liftIO newStdGen
+    simul <- liftIO $ newMVar (t, sim0)
     k     <- liftIO $ cacheNew (appSimulations app) (e, simul)
     liftIO $ keepAlive (appSimulations app) k 30
     Just (b, t) <- renderTemplate
@@ -321,10 +326,15 @@ gameInBrowser app = do
         Right pic -> runGame app dig res pic
 
 
-runGame :: App -> ByteString -> Err Game -> Game -> Snap ()
+runGame :: App
+        -> ByteString
+        -> Err (StdGen -> Game)
+        -> (StdGen -> Game)
+        -> Snap ()
 runGame app dig e game = do
     t     <- liftIO getCurrentTime
-    gvar  <- liftIO $ newMVar (t, 0, game)
+    g0    <- game <$> liftIO newStdGen
+    gvar  <- liftIO $ newMVar (t, 0, g0)
     k     <- liftIO $ cacheNew (appGames app) (e, gvar)
     liftIO $ keepAlive (appGames app) k 30
     Just (b, t) <- renderTemplate

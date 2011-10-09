@@ -51,10 +51,10 @@ getPicture _ _ = return (B.empty, Right picture)
 getAnimation :: App -> Either ByteString ByteString -> IO (ByteString, Err (Float -> Picture))
 getAnimation _ _ = return (B.empty, Right animation)
 
-getSimulation :: App -> Either ByteString ByteString -> IO (ByteString, Err Simulation)
+getSimulation :: App -> Either ByteString ByteString -> IO (ByteString, Err (StdGen -> Simulation))
 getSimulation _ _ = return (B.empty, Right simulation)
 
-getGame :: App -> Either ByteString ByteString -> IO (ByteString, Err Game)
+getGame :: App -> Either ByteString ByteString -> IO (ByteString, Err (StdGen -> Game))
 getGame _ _ = return (B.empty, Right game)
 
 #else
@@ -75,19 +75,19 @@ getAnimation app src = do
                      src
 
 
-getSimulation :: App -> Either ByteString ByteString -> IO (ByteString, Err Simulation)
+getSimulation :: App -> Either ByteString ByteString -> IO (ByteString, Err (StdGen -> Simulation))
 getSimulation app src = do
     getCompileResult (appCompiledSimulations app)
-                     "Simulation initial step draw"
-                     "Simulation"
+                     "(\\r -> Simulation (initial r) step draw)"
+                     "StdGen -> Simulation"
                      src
 
 
-getGame :: App -> Either ByteString ByteString -> IO (ByteString, Err Game)
+getGame :: App -> Either ByteString ByteString -> IO (ByteString, Err (StdGen -> Game))
 getGame app src = do
     getCompileResult (appCompiledGames app)
-                     "Game initial event step draw"
-                     "Game"
+                     "(\\r -> Game (initial r) event step draw)"
+                     "StdGen -> Game"
                      src
 
 #endif
@@ -177,8 +177,9 @@ compile vname tname fn = doWithErrors $ do
         GHC.ghcLink = GHC.LinkInMemory,
         GHC.hscTarget = GHC.HscInterpreted,
         GHC.safeHaskell = GHC.Sf_Safe,
-        GHC.packageFlags = [GHC.TrustPackage "gloss",
-                            GHC.ExposePackage "gloss-web-adapters" ]
+        GHC.packageFlags = [GHC.TrustPackage  "gloss",
+                            GHC.ExposePackage "gloss-web-adapters",
+                            GHC.ExposePackage "random" ]
         }
     GHC.setSessionDynFlags dflags'
     target <- GHC.guessTarget fn Nothing
@@ -191,6 +192,8 @@ compile vname tname fn = doWithErrors $ do
             GHC.setContext [ mainMod ]
                            [ GHC.simpleImportDecl
                                (GHC.mkModuleName "Graphics.Gloss"),
+                             GHC.simpleImportDecl
+                               (GHC.mkModuleName "System.Random"),
                              GHC.simpleImportDecl
                                (GHC.mkModuleName "GlossAdapters") ]
             v <- GHC.compileExpr $ vname ++ " :: " ++ tname

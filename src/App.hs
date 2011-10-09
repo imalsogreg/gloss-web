@@ -5,6 +5,7 @@ import Data.Time
 import Data.Word
 import Graphics.Gloss
 import Snap.Types
+import System.Random
 import Text.Templating.Heist
 
 import           Data.Map (Map)
@@ -18,9 +19,9 @@ import GlossAdapters
 import CacheMap
 
 
-type Anim        = (Err (Float -> Picture), UTCTime, Float -> Picture)
-type Sim         = (Err Simulation, MVar (UTCTime, Simulation))
-type RunningGame = (Err Game, MVar (UTCTime, Word64, Game))
+type Anim        = (Err (Float  -> Picture),    UTCTime, Float -> Picture)
+type Sim         = (Err (StdGen -> Simulation), MVar (UTCTime, Simulation))
+type RunningGame = (Err (StdGen -> Game)      , MVar (UTCTime, Word64, Game))
 
 type Err a = Either [String] a
 
@@ -31,8 +32,8 @@ data App = App {
     appGames               :: CacheMap Int RunningGame,
     appCompiledPictures    :: CacheMap ByteString (Err Picture),
     appCompiledAnimations  :: CacheMap ByteString (Err (Float -> Picture)),
-    appCompiledSimulations :: CacheMap ByteString (Err Simulation),
-    appCompiledGames       :: CacheMap ByteString (Err Game)
+    appCompiledSimulations :: CacheMap ByteString (Err (StdGen -> Simulation)),
+    appCompiledGames       :: CacheMap ByteString (Err (StdGen -> Game))
     }
 
 
