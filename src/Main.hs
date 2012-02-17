@@ -40,7 +40,7 @@ import GlossAdapters
 
 main :: IO ()
 main = do
-    Right heist <- loadTemplates "web" (emptyTemplateState "web")
+    Right heist <- loadTemplates "web" defaultHeistState
     app         <- newApp heist
     quickHttpServe $
         route [ ("draw",              draw app),
@@ -191,11 +191,11 @@ displayInBrowser app = do
     (dig, res) <- liftIO $ getPicture app src
     case res of
         Left errs -> errors app errs
-        Right pic -> display app dig pic
+        Right pic -> displayResult app dig pic
 
 
-display :: App -> ByteString -> Picture -> Snap ()
-display app dig pic = do
+displayResult :: App -> ByteString -> Picture -> Snap ()
+displayResult app dig pic = do
     Just (b, t) <- renderTemplate
         (     bindSplice "displayScript" (scrSplice pic)
             $ bindSplice "share" (shareLink "displayInBrowser" dig)
@@ -217,11 +217,11 @@ animateInBrowser app = do
     (dig, res) <- liftIO $ getAnimation app src
     case res of
         Left errs -> errors app errs
-        Right pic -> animate app dig res pic
+        Right pic -> animateResult app dig res pic
 
 
-animate :: App -> ByteString -> Err (Float -> Picture) -> (Float -> Picture) -> Snap ()
-animate app dig e f = do
+animateResult :: App -> ByteString -> Err (Float -> Picture) -> (Float -> Picture) -> Snap ()
+animateResult app dig e f = do
     t <- liftIO getCurrentTime
     let anim = (e, t, f)
     k <- liftIO $ cacheNew (appAnimations app) anim
@@ -268,15 +268,15 @@ simulateInBrowser app = do
     (dig, res) <- liftIO $ getSimulation app src
     case res of
         Left errs -> errors app errs
-        Right pic -> simulate app dig res pic
+        Right pic -> simulateResult app dig res pic
 
 
-simulate :: App
-         -> ByteString
-         -> Err (StdGen -> Simulation)
-         -> (StdGen -> Simulation)
-         -> Snap ()
-simulate app dig e sim = do
+simulateResult :: App
+               -> ByteString
+               -> Err (StdGen -> Simulation)
+               -> (StdGen -> Simulation)
+               -> Snap ()
+simulateResult app dig e sim = do
     t     <- liftIO getCurrentTime
     sim0  <- sim <$> liftIO newStdGen
     simul <- liftIO $ newMVar (t, sim0)

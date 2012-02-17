@@ -66,10 +66,8 @@ fromPicture (Text str)
     = fromWord8  6 `mappend` fromWord32be (fromIntegral (B.length t))
       `mappend` fromByteString t
   where t = T.encodeUtf8 (T.pack str)
-fromPicture (Bitmap w h bmp)
-    = fromWord8  7 `mappend` fromWord32be (fromIntegral (B.length b))
-      `mappend` fromByteString b
-  where b = toPng w h bmp
+fromPicture (Bitmap w h bmp cache)
+    = fromWord8  7
 fromPicture (Color c p)
     = fromWord8  8 `mappend` fromColor c `mappend` fromPicture p
 fromPicture (Translate x y p)

@@ -107,7 +107,7 @@
             <hr style="clear:both">
         </div>
         <div style="position: absolute; top: 70px; bottom: 0px; left: 0px; right: 0px">
-            <form id="form" action="$(action)" method="post" target="display" style="height: 100%">
+            <form id="form" action="${action}" method="post" target="display" style="height: 100%">
             <div id="runBox" style="float: right">
                 <iframe frameborder="0" name="display" src="about:blank" width="525" height="525"></iframe>
             </div>

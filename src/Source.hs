@@ -181,7 +181,7 @@ compile vname tname fn = doWithErrors $ do
                             GHC.ExposePackage "gloss-web-adapters",
                             GHC.ExposePackage "random" ]
         }
-    GHC.setSessionDynFlags dflags'
+    GHC.setSessionDynFlags (GHC.dopt_set dflags' GHC.Opt_PackageTrust)
     target <- GHC.guessTarget fn Nothing
     GHC.setTargets [target]
     r <- fmap GHC.succeeded (GHC.load GHC.LoadAllTargets)
@@ -189,13 +189,13 @@ compile vname tname fn = doWithErrors $ do
         True -> do
             mods <- GHC.getModuleGraph
             let mainMod = GHC.ms_mod (head mods)
-            GHC.setContext [ mainMod ]
-                           [ GHC.simpleImportDecl
-                               (GHC.mkModuleName "Graphics.Gloss"),
-                             GHC.simpleImportDecl
-                               (GHC.mkModuleName "System.Random"),
-                             GHC.simpleImportDecl
-                               (GHC.mkModuleName "GlossAdapters") ]
+            GHC.setContext [ GHC.IIModule mainMod,
+                             GHC.IIDecl (GHC.simpleImportDecl
+                               (GHC.mkModuleName "Graphics.Gloss")),
+                             GHC.IIDecl (GHC.simpleImportDecl
+                               (GHC.mkModuleName "System.Random")),
+                             GHC.IIDecl (GHC.simpleImportDecl
+                               (GHC.mkModuleName "GlossAdapters")) ]
             v <- GHC.compileExpr $ vname ++ " :: " ++ tname
             return (Just (unsafeCoerce# v))
         False -> return Nothing
