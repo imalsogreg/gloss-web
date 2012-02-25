@@ -259,7 +259,7 @@ animateStream app = do
         return (f t)
     eventStreamPull (fmap pictureEvent source)
   where
-    targetInterval = 0.1
+    targetInterval = 0.05
 
 
 simulateInBrowser :: App -> Snap ()
@@ -314,7 +314,7 @@ simulateStream app = do
         return ((t1, sim'), pic)
     eventStreamPull (fmap pictureEvent source)
   where
-    targetInterval = 0.1
+    targetInterval = 0.05
 
 
 gameInBrowser :: App -> Snap ()
@@ -372,7 +372,7 @@ gameStream app = do
         return ((t1, prev, game'), pic)
     eventStreamPull (fmap pictureEvent source)
   where
-    targetInterval = 0.1
+    targetInterval = 0.05
 
 
 gameEvent :: App -> Snap ()

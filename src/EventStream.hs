@@ -11,12 +11,16 @@ module EventStream (
     ) where
 
 import Blaze.ByteString.Builder
+import Blaze.ByteString.Builder.ByteString
 import Blaze.ByteString.Builder.Char8
 import Control.Monad.Trans
 import Control.Concurrent
+import Data.IORef
 import Data.Monoid
 import Data.Enumerator.List (generateM)
 import Snap.Types
+
+import qualified Data.ByteString.Char8 as BC
 
 {-|
     Type representing a communication over an event stream.  This can be an
@@ -83,6 +87,17 @@ eventToBuilder (ServerEvent n i d)= Just $ flushAfter $
     evid (Just i) = mappend (field idField   i)
 
 
+ieWrap :: IO ServerEvent -> IO (IO ServerEvent)
+ieWrap src = do
+    v <- newIORef False
+    return $ do
+        i <- readIORef v
+        writeIORef v True
+        if i then src else return pad
+  where
+    pad = CommentEvent $ fromByteString $ BC.replicate 2049 ' '
+
+
 {-|
     Sets up this request to act as an event stream, obtaining its events from
     polling the given IO action.
@@ -90,9 +105,10 @@ eventToBuilder (ServerEvent n i d)= Just $ flushAfter $
 eventStreamPull :: IO ServerEvent -> Snap ()
 eventStreamPull source = do
     modifyResponse (setContentType "text/event-stream")
-    timeout <- getTimeoutAction
+    timeout    <- getTimeoutAction
+    trueSource <- liftIO $ ieWrap source
     modifyResponse $ setResponseBody $
-        generateM (timeout 3600 >> fmap eventToBuilder source)
+        generateM (timeout 3600 >> fmap eventToBuilder trueSource)
 
 
 {-|

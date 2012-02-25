@@ -23,7 +23,7 @@
                 tabindex="0"
                 style="border:solid black 1px">
         </canvas>
-        <div align="center"><a target="_top" href="$(share)">permalink</a></div>
+        <div align="center"><a target="_top" href="${share}">permalink</a></div>
     </body>
 </html>
 
