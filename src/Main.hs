@@ -137,9 +137,9 @@ sim app = do
         TextNode "var sourceCookie = 'simulateSource';",
         TextNode "var initialSource = 'import Graphics.Gloss\\n\\n",
         TextNode "data BallState = BallAt Float Float\\n",
-        TextNode "initial _ = BallAt 100 0\\n",
-        TextNode "step _ t (BallAt x v) = BallAt (x+v*t) (0.99*v-x*t)\\n",
-        TextNode "draw     (BallAt x v) = translate x x (circle 20)';"
+        TextNode "initial _           = BallAt 100 0\\n",
+        TextNode "step t (BallAt x v) = BallAt (x+v*t) (0.99*v-x*t)\\n",
+        TextNode "draw   (BallAt x v) = translate x x (circle 20)';"
         ]]
 
 

@@ -10,17 +10,16 @@ import Graphics.Gloss.Interface.Game
 
 data Simulation = forall a. Simulation
     a
-    (ViewPort -> Float -> a -> a)
+    (Float -> a -> a)
     (a -> Picture)
 
 
 advanceSimulation :: Float -> Simulation -> Simulation
-advanceSimulation t (Simulation c s p) = Simulation (s v t c) s p
-    where v = ViewPort (0,0) 0 1
+advanceSimulation dt (Simulation w s d) = Simulation (s dt w) s d
 
 
 simulationToPicture :: Simulation -> Picture
-simulationToPicture (Simulation c s p) = p c
+simulationToPicture (Simulation w s d) = d w
 
 
 data Game = forall a. Game
@@ -31,13 +30,12 @@ data Game = forall a. Game
 
 
 advanceGame :: Float -> Game -> Game
-advanceGame t (Game w e a d) = Game (a t w) e a d
+advanceGame dt (Game w e s d) = Game (s dt w) e s d
 
 
 signalGame :: Event -> Game -> Game
-signalGame ev (Game w e a d) = Game (e ev w) e a d
+signalGame ev (Game w e s d) = Game (e ev w) e s d
 
 
 gameToPicture :: Game -> Picture
-gameToPicture (Game w e a d) = d w
-
+gameToPicture (Game w e s d) = d w
