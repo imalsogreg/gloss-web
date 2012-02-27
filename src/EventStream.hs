@@ -105,6 +105,8 @@ ieWrap src = do
 eventStreamPull :: IO ServerEvent -> Snap ()
 eventStreamPull source = do
     modifyResponse (setContentType "text/event-stream")
+    modifyResponse (addHeader "Cache-Control" "no-cache")
+    modifyResponse (addHeader "Access-Control-Allow-Origin" "*")
     timeout    <- getTimeoutAction
     trueSource <- liftIO $ ieWrap source
     modifyResponse $ setResponseBody $
