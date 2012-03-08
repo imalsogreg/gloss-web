@@ -2,11 +2,13 @@
 {-# LANGUAGE MagicHash           #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections       #-}
+{-# LANGUAGE OverloadedStrings   #-}
 
 module Source where
 
 import Prelude hiding (catch)
 
+import Control.Applicative
 import Control.Concurrent.MVar
 import Control.Exception
 import Control.Monad
@@ -45,51 +47,6 @@ import ProtectHandlers
 
 import ProfileSubst
 
-getPicture :: App -> Either ByteString ByteString -> IO (ByteString, Err Picture)
-getPicture _ _ = return (B.empty, Right picture)
-
-getAnimation :: App -> Either ByteString ByteString -> IO (ByteString, Err (Float -> Picture))
-getAnimation _ _ = return (B.empty, Right animation)
-
-getSimulation :: App -> Either ByteString ByteString -> IO (ByteString, Err (StdGen -> Simulation))
-getSimulation _ _ = return (B.empty, Right simulation)
-
-getGame :: App -> Either ByteString ByteString -> IO (ByteString, Err (StdGen -> Game))
-getGame _ _ = return (B.empty, Right game)
-
-#else
-
-getPicture :: App -> Either ByteString ByteString -> IO (ByteString, Err Picture)
-getPicture app src = do
-    getCompileResult (appCompiledPictures app)
-                     "picture"
-                     "Picture"
-                     src
-
-
-getAnimation :: App -> Either ByteString ByteString -> IO (ByteString, Err (Float -> Picture))
-getAnimation app src = do
-    getCompileResult (appCompiledAnimations app)
-                     "animation"
-                     "Float -> Picture"
-                     src
-
-
-getSimulation :: App -> Either ByteString ByteString -> IO (ByteString, Err (StdGen -> Simulation))
-getSimulation app src = do
-    getCompileResult (appCompiledSimulations app)
-                     "(\\r -> Simulation (initial r) step draw)"
-                     "StdGen -> Simulation"
-                     src
-
-
-getGame :: App -> Either ByteString ByteString -> IO (ByteString, Err (StdGen -> Game))
-getGame app src = do
-    getCompileResult (appCompiledGames app)
-                     "(\\r -> Game (initial r) event step draw)"
-                     "StdGen -> Game"
-                     src
-
 #endif
 
 
@@ -98,34 +55,31 @@ getGame app src = do
     is the cache, which should be different for different expected variables
     and types
 -}
-getCompileResult :: CacheMap ByteString (Err t)
-                 -> String
+getCompileResult :: CacheMap (WorldType, ByteString) CompileResult
+                 -> WorldType
                  -> String
                  -> Either ByteString ByteString
-                 -> IO (ByteString, Err t)
-getCompileResult cmap vname tname inp = do
-    r <- case source of
-        Nothing -> do
-            mr <- getCached cmap digest
-            case mr of
-                Nothing -> do
-                    e <- doesFileExist fname
-                    if e then cache cmap digest $ compile vname tname fname
-                         else return (Left [ "Program not found" ])
-                Just r  -> return r
-        Just src -> do
-            cache cmap digest $ do
-                B.writeFile fname src
-                compile vname tname fname
-    keepAlive cmap digest 30
-    return (digest, r)
+                 -> IO (ByteString, ByteString, CompileResult)
+getCompileResult cmap typ expr inp = do
+    (dig, src, r) <- case inp of
+        Left dig -> do
+            e  <- doesFileExist (fname dig)
+            if not e then return ("", "", ([], Nothing)) else do
+                mr <- getCached cmap (typ, dig)
+                src <- B.readFile (fname dig)
+                case mr of
+                    Nothing -> (dig,src,) <$> cache cmap (typ, dig) (result dig)
+                    Just r  -> return (dig, src, r)
+        Right src -> do
+            let dig = hash src
+            (dig,src,) <$> (cache cmap (typ, dig) $ do
+                B.writeFile (fname dig) src
+                result dig)
+    keepAlive cmap (typ, dig) 30
+    return (dig, src, r)
   where
-    digest = case inp of Left digest -> digest
-                         Right src   -> hash src
-    source = case inp of Left _      -> Nothing
-                         Right src   -> Just src
-    fname  = "tmp/" ++ base64FileName digest ++ ".hs"
-
+    fname digest  = "tmp/" ++ base64FileName digest ++ ".hs"
+    result digest = compile expr (fname digest)
 
 {-|
     Runs an action in the 'Ghc' monad, and automatically collects error
@@ -133,12 +87,12 @@ getCompileResult cmap vname tname inp = do
     it's a bit of tricky trial-and-error to handle them all uniformly, so
     this function abstracts that.
 -}
-doWithErrors :: GHC.Ghc (Maybe a) -> IO (Err a)
+doWithErrors :: GHC.Ghc (Maybe CompiledWorld) -> IO CompileResult
 doWithErrors action = do
     codeErrors <- newIORef []
     protectHandlers $ catch (wrapper codeErrors) $ \ (e :: SomeException) -> do
         errs <- readIORef codeErrors
-        return (Left errs)
+        return (errs, Nothing)
   where
     wrapper codeErrors = fixupErrors codeErrors =<< do
         GHC.defaultErrorHandler (logAction codeErrors)
@@ -160,8 +114,8 @@ doWithErrors action = do
             cleaned = map (GHC.showSDoc . GHC.errMsgShortDoc) errs
         GHC.liftIO $ modifyIORef ref (++ cleaned)
         return Nothing
-    fixupErrors errs (Just x) = return (Right x)
-    fixupErrors errs Nothing  = fmap Left (readIORef errs)
+    fixupErrors errs (Just x) = fmap (, Just x)  (readIORef errs)
+    fixupErrors errs Nothing  = fmap (, Nothing) (readIORef errs)
 
 
 {-|
@@ -169,8 +123,8 @@ doWithErrors action = do
     with the given type.  If the type passed in doesn't match the way the
     result is used, the server process will likely segfault.
 -}
-compile :: String -> String -> FilePath -> IO (Err t)
-compile vname tname fn = doWithErrors $ do
+compile :: String -> FilePath -> IO CompileResult
+compile expr fn = doWithErrors $ do
     dflags <- GHC.getSessionDynFlags
     let dflags' = dflags {
         GHC.ghcMode = GHC.CompManager,
@@ -190,13 +144,12 @@ compile vname tname fn = doWithErrors $ do
             mods <- GHC.getModuleGraph
             let mainMod = GHC.ms_mod (head mods)
             GHC.setContext [ GHC.IIModule mainMod,
-                             GHC.IIDecl (GHC.simpleImportDecl
-                               (GHC.mkModuleName "Graphics.Gloss")),
-                             GHC.IIDecl (GHC.simpleImportDecl
-                               (GHC.mkModuleName "System.Random")),
-                             GHC.IIDecl (GHC.simpleImportDecl
-                               (GHC.mkModuleName "GlossAdapters")) ]
-            v <- GHC.compileExpr $ vname ++ " :: " ++ tname
+                             GHC.IIDecl (qualifiedImportDecl "GlossAdapters" "G") ]
+            v <- GHC.compileExpr expr
             return (Just (unsafeCoerce# v))
         False -> return Nothing
 
+qualifiedImportDecl m a = (GHC.simpleImportDecl (GHC.mkModuleName m)) {
+    GHC.ideclQualified = True,
+    GHC.ideclAs = Just (GHC.mkModuleName a)
+    }

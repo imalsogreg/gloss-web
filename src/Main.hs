@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE GADTs             #-}
 module Main where
 
 import Blaze.ByteString.Builder
@@ -6,29 +7,38 @@ import Control.Applicative
 import Control.Concurrent
 import Control.Monad
 import Control.Monad.Trans
-import Data.Aeson
-import Data.Aeson.Encode
 import Data.IORef
+import Data.Maybe
 import Data.Monoid
 import Data.Time
 import Graphics.Gloss
 import Graphics.Gloss.Interface.Game
 import Snap.Http.Server
-import Snap.Types
+import Snap.Core
 import Snap.Util.FileServe
 import System.Random
 import Text.Templating.Heist
 import Text.XmlHtml
 
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Char8 as BC
-import qualified Data.ByteString.Lazy as LB
+import qualified Data.ByteString        as B
+import qualified Data.ByteString.Char8  as BC
+import qualified Data.ByteString.Lazy   as LB
+
 import qualified Data.ByteString.Base64 as B64
 
 import Data.Text (Text)
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
+import qualified Data.Text              as T
+import qualified Data.Text.Encoding     as T
+import qualified Data.Text.Lazy         as LT
+import qualified Data.Text.Lazy.Builder as LT
+
+import qualified Data.Aeson        as A
+import qualified Data.Aeson.Encode as A
+
+import qualified Data.Vector       as V
+
+import qualified Data.HashMap.Lazy as HM
 
 import App
 import EventStream
@@ -36,7 +46,6 @@ import CacheMap
 import Source
 import Serialize
 import GlossAdapters
-
 
 main :: IO ()
 main = do
@@ -49,13 +58,140 @@ main = do
                 ("game",              game app),
                 ("displayInBrowser",  displayInBrowser  app),
                 ("animateInBrowser",  animateInBrowser  app),
-                ("animateStream",     animateStream     app),
                 ("simulateInBrowser", simulateInBrowser app),
-                ("simulateStream",    simulateStream    app),
-                ("gameInBrowser",     gameInBrowser app),
-                ("gameStream",        gameStream    app),
-                ("gameEvent",         gameEvent     app) ]
+                ("gameInBrowser",     gameInBrowser     app),
+                ("playStream",        playStream        app),
+                ("playEvent",         playEvent         app),
+                ("api/:type",         apiTop            app),
+                ("api/:type/:hash",   apiWorld          app),
+                ("api/session/:sid",  apiSession        app) ]
         <|> serveDirectory "web"
+
+
+toFullURL :: Text -> Snap Text
+toFullURL p = do
+    secure <- getsRequest rqIsSecure
+    host   <- getsRequest rqServerName
+    port   <- getsRequest rqServerPort
+    uri    <- getsRequest rqURI
+    let scheme = if secure then "https" else "http"
+    let defPort | secure    = 443
+                | otherwise = 80
+    let baseURI = fst $ T.breakOn "/api" (T.decodeUtf8 uri)
+    return $ scheme
+          <> "://"
+          <> T.decodeUtf8 host
+          <> if defPort == port then "" else ":" `mappend` T.pack (show port)
+          <> baseURI
+          <> p
+
+
+toWorldType :: ByteString -> WorldType
+toWorldType "picture"    = PictureType
+toWorldType "animation"  = AnimationType
+toWorldType "simulation" = SimulationType
+toWorldType "game"       = GameType
+
+
+fromWorldType :: WorldType -> ByteString
+fromWorldType PictureType    = "picture"
+fromWorldType AnimationType  = "animation"
+fromWorldType SimulationType = "simulation"
+fromWorldType GameType       = "game"
+
+
+compileWorld :: WorldType
+             -> Either ByteString ByteString
+             -> App
+             -> Snap (ByteString, ByteString, CompileResult)
+compileWorld typ src app = liftIO $ getCompileResult (appPrograms app) typ exp src
+  where exp = case typ of
+            PictureType    -> "G.worldFromPicture picture :: G.CompiledWorld"
+            AnimationType  -> "G.worldFromAnimation animation :: G.CompiledWorld"
+            SimulationType -> "G.worldFromSimulation initial step draw :: G.CompiledWorld"
+            GameType       -> "G.worldFromGame initial step event draw :: G.CompiledWorld"
+
+
+apiTop :: App -> Snap ()
+apiTop app     = method POST (compileNew     app)
+
+
+apiWorld :: App -> Snap ()
+apiWorld app   = method GET  (retrieveSource app)
+             <|> method POST (startSession   app)
+
+
+apiSession :: App -> Snap ()
+apiSession app = method GET  (getWorldResult app)
+             <|> method POST (postEvent      app)
+
+
+compileNew :: App -> Snap ()
+compileNew app = do
+    typeId <- maybe pass return =<< getParam "type"
+    src    <- (B.concat . LB.toChunks) <$> readRequestBody maxSize
+
+    let typ = toWorldType typeId
+    (dig, _, res) <- compileWorld typ (Right src) app
+
+    sendProgInfo typ dig src res
+  where maxSize = 256 * 1024
+
+
+retrieveSource :: App -> Snap ()
+retrieveSource app = do
+    typeId <- maybe pass return =<< getParam "type"
+    digest <- maybe pass return =<< getParam "hash"
+
+    let typ      = toWorldType typeId
+    let Just dig = B64.decodeLenient <$> urlDecode digest
+
+    (_, src, res) <- compileWorld typ (Left dig) app
+
+    sendProgInfo typ dig src res
+
+
+sendProgInfo :: WorldType -> ByteString -> ByteString -> CompileResult -> Snap ()
+sendProgInfo typ dig src (msgs, res) = do
+    when (dig == "") $ do
+        modifyResponse (setResponseCode 404)
+        finishWith =<< getResponse
+
+    url <- toFullURL $ "/api/" <> T.decodeUtf8 (fromWorldType typ) <> "/" <> encDig
+
+    props <- case res of
+        Nothing -> return [
+                ("success", A.Bool False)
+                ]
+        Just w -> do
+            g   <- liftIO newStdGen
+            return [
+                ("success", A.Bool True),
+                ("picture", A.String $ T.decodeUtf8 $ toByteString
+                          $ base64 $ fromPicture $ drawWorld $ w g),
+                ("session", A.Bool $ typ /= PictureType)
+                ]
+
+    modifyResponse $ setContentType "application/json"
+    writeLazyText $ LT.toLazyText $ A.fromValue $ A.Object $ HM.fromList $
+        props ++ [
+            ("uri",      A.String $ url),
+            ("messages", A.Array $ V.fromList
+                         $ map (A.String . T.pack) msgs)
+            ]
+  where encDig = T.decodeUtf8 $ urlEncode $ B64.encode dig
+
+
+startSession :: App -> Snap ()
+startSession = undefined
+
+
+getWorldResult :: App -> Snap ()
+getWorldResult = undefined
+
+
+postEvent :: App -> Snap ()
+postEvent = undefined
 
 
 draw :: App -> Snap ()
@@ -185,20 +321,45 @@ getSource = (maybe pass (return . Right) =<< getParam "source")
     <|> (maybe pass (return . Left . B64.decodeLenient)  =<< getParam "digest")
 
 
-displayInBrowser :: App -> Snap ()
-displayInBrowser app = do
+doInBrowser :: WorldType
+            -> (Text -> App -> ByteString -> World -> Snap ())
+            -> App
+            -> Snap ()
+doInBrowser typ present app = do
     src <- getSource
-    (dig, res) <- liftIO $ getPicture app src
+    (dig, _, res) <- compileWorld typ src app
     case res of
-        Left errs -> errors app errs
-        Right pic -> displayResult app dig pic
+        (errs, Nothing)  -> errors app errs
+        (_,    Just res) -> do g <- liftIO newStdGen
+                               present handler app dig (res g)
+  where handler | typ == PictureType    = "displayInBrowser"
+                | typ == AnimationType  = "animateInBrowser"
+                | typ == SimulationType = "simulateInBrowser"
+                | typ == GameType       = "gameInBrowser"
 
 
-displayResult :: App -> ByteString -> Picture -> Snap ()
-displayResult app dig pic = do
+displayInBrowser :: App -> Snap ()
+displayInBrowser  = doInBrowser PictureType displayResult
+
+
+animateInBrowser :: App -> Snap ()
+animateInBrowser  = doInBrowser AnimationType playResult
+
+
+simulateInBrowser :: App -> Snap ()
+simulateInBrowser = doInBrowser SimulationType playResult
+
+
+gameInBrowser :: App -> Snap ()
+gameInBrowser     = doInBrowser GameType playResult
+
+
+displayResult :: Text -> App -> ByteString -> World -> Snap ()
+displayResult typ app dig w = do
+    let pic = drawWorld w
     Just (b, t) <- renderTemplate
         (     bindSplice "displayScript" (scrSplice pic)
-            $ bindSplice "share" (shareLink "displayInBrowser" dig)
+            $ bindSplice "share" (shareLink typ dig)
             $ appHeist app)
         "display"
     modifyResponse (setContentType t)
@@ -211,172 +372,52 @@ displayResult app dig pic = do
         ]]
 
 
-animateInBrowser :: App -> Snap ()
-animateInBrowser app = do
-    src <- getSource
-    (dig, res) <- liftIO $ getAnimation app src
-    case res of
-        Left errs -> errors app errs
-        Right pic -> animateResult app dig res pic
-
-
-animateResult :: App -> ByteString -> Err (Float -> Picture) -> (Float -> Picture) -> Snap ()
-animateResult app dig e f = do
-    t <- liftIO getCurrentTime
-    let anim = (e, t, f)
-    k <- liftIO $ cacheNew (appAnimations app) anim
-    liftIO $ keepAlive (appAnimations app) k 30
-    Just (b, t) <- renderTemplate
-        (     bindSplice "displayScript" (scrSplice k)
-            $ bindSplice "share" (shareLink "animateInBrowser" dig)
-            $ appHeist app)
-        "display"
-    modifyResponse (setContentType t)
-    writeBuilder b
-  where
-    scrSplice k = return [ Element "script" [("type", "text/javascript")] [
-        TextNode "streamURI = \'animateStream?key=",
-        TextNode $ T.pack $ show k,
-        TextNode "\';"
-        ]]
-
-
-animateStream :: App -> Snap ()
-animateStream app = do
-    k          <- fmap (read . BC.unpack) $ maybe pass return =<< getParam "key"
-    (_, t0, f) <- maybe pass return =<< liftIO (getCached (appAnimations app) k)
-    tv         <- liftIO (newIORef =<< getCurrentTime)
-    source     <- cullDuplicates $ do
-        keepAlive (appAnimations app) k 30
-        t1 <- getCurrentTime
-        t' <- readIORef tv
-        let interval = t1 `diffUTCTime` t'
-        when (interval < targetInterval) $
-            threadDelay $ round $ 1000000 * (targetInterval - interval)
-        t1 <- getCurrentTime
-        writeIORef tv t1
-        let t = realToFrac (t1 `diffUTCTime` t0)
-        return (f t)
-    eventStreamPull (fmap pictureEvent source)
-  where
-    targetInterval = 0.05
-
-
-simulateInBrowser :: App -> Snap ()
-simulateInBrowser app = do
-    src <- getSource
-    (dig, res) <- liftIO $ getSimulation app src
-    case res of
-        Left errs -> errors app errs
-        Right pic -> simulateResult app dig res pic
-
-
-simulateResult :: App
-               -> ByteString
-               -> Err (StdGen -> Simulation)
-               -> (StdGen -> Simulation)
-               -> Snap ()
-simulateResult app dig e sim = do
+playResult :: Text -> App -> ByteString -> World -> Snap ()
+playResult typ app dig w = do
     t     <- liftIO getCurrentTime
-    sim0  <- sim <$> liftIO newStdGen
-    simul <- liftIO $ newMVar (t, sim0)
-    k     <- liftIO $ cacheNew (appSimulations app) (e, simul)
-    liftIO $ keepAlive (appSimulations app) k 30
-    Just (b, t) <- renderTemplate
+    wvar  <- liftIO $ newMVar (t, 0, w)
+    k     <- liftIO $ cacheNew (appSessions app) wvar
+    liftIO $ keepAlive (appSessions app) k 30
+    Just (b, ct) <- renderTemplate
         (     bindSplice "displayScript" (scrSplice k)
-            $ bindSplice "share" (shareLink "simulateInBrowser" dig)
+            $ bindSplice "share" (shareLink typ dig)
             $ appHeist app)
         "display"
-    modifyResponse (setContentType t)
+    modifyResponse (setContentType ct)
     writeBuilder b
   where
     scrSplice k = return [ Element "script" [("type", "text/javascript")] [
-        TextNode "streamURI = \'simulateStream?key=",
-        TextNode $ T.pack $ show k,
-        TextNode "\';"
-        ]]
-
-
-simulateStream :: App -> Snap ()
-simulateStream app = do
-    k        <- fmap (read . BC.unpack) $ maybe pass return =<< getParam "key"
-    (_, var) <- maybe pass return =<< liftIO (getCached (appSimulations app) k)
-    source   <- cullDuplicates $ modifyMVar var $ \(t0, sim) -> do
-        keepAlive (appSimulations app) k 30
-        t1 <- getCurrentTime
-        let interval = t1 `diffUTCTime` t0
-        when (interval < targetInterval) $
-            threadDelay $ round $ 1000000 * (targetInterval - interval)
-        t1 <- getCurrentTime
-        let t = realToFrac (t1 `diffUTCTime` t0)
-        let sim' = advanceSimulation t sim
-        let pic  = simulationToPicture sim'
-        return ((t1, sim'), pic)
-    eventStreamPull (fmap pictureEvent source)
-  where
-    targetInterval = 0.05
-
-
-gameInBrowser :: App -> Snap ()
-gameInBrowser app = do
-    src <- getSource
-    (dig, res) <- liftIO $ getGame app src
-    case res of
-        Left errs -> errors app errs
-        Right pic -> runGame app dig res pic
-
-
-runGame :: App
-        -> ByteString
-        -> Err (StdGen -> Game)
-        -> (StdGen -> Game)
-        -> Snap ()
-runGame app dig e game = do
-    t     <- liftIO getCurrentTime
-    g0    <- game <$> liftIO newStdGen
-    gvar  <- liftIO $ newMVar (t, 0, g0)
-    k     <- liftIO $ cacheNew (appGames app) (e, gvar)
-    liftIO $ keepAlive (appGames app) k 30
-    Just (b, t) <- renderTemplate
-        (     bindSplice "displayScript" (scrSplice k)
-            $ bindSplice "share" (shareLink "gameInBrowser" dig)
-            $ appHeist app)
-        "display"
-    modifyResponse (setContentType t)
-    writeBuilder b
-  where
-    scrSplice k = return [ Element "script" [("type", "text/javascript")] [
-        TextNode "streamURI = \'gameStream?key=",
+        TextNode "streamURI = \'playStream?key=",
         TextNode $ T.pack $ show k,
         TextNode "\';",
-        TextNode "eventURI = \'gameEvent?key=",
+        TextNode "eventURI = \'playEvent?key=",
         TextNode $ T.pack $ show k,
         TextNode "\';"
         ]]
 
 
-gameStream :: App -> Snap ()
-gameStream app = do
-    k        <- fmap (read . BC.unpack) $ maybe pass return =<< getParam "key"
-    (_, var) <- maybe pass return =<< liftIO (getCached (appGames app) k)
-    source   <- cullDuplicates $ modifyMVar var $ \(t0, prev, game) -> do
-        keepAlive (appGames app) k 30
+playStream :: App -> Snap ()
+playStream app = do
+    k   <- fmap (read . BC.unpack) $ maybe pass return =<< getParam "key"
+    var <- maybe pass return =<< liftIO (getCached (appSessions app) k)
+    source   <- cullDuplicates $ modifyMVar var $ \(t0, prev, w) -> do
+        keepAlive (appSessions app) k 30
         t1 <- getCurrentTime
         let interval = t1 `diffUTCTime` t0
         when (interval < targetInterval) $
             threadDelay $ round $ 1000000 * (targetInterval - interval)
         t1 <- getCurrentTime
-        let t = realToFrac (t1 `diffUTCTime` t0)
-        let game' = advanceGame t game
-        let pic  = gameToPicture game'
-        return ((t1, prev, game'), pic)
+        let dt = realToFrac (t1 `diffUTCTime` t0)
+        let w' = stepWorld dt w
+        let pic  = drawWorld w'
+        return ((t1, prev, w'), pic)
     eventStreamPull (fmap pictureEvent source)
   where
     targetInterval = 0.05
 
 
-gameEvent :: App -> Snap ()
-gameEvent app = do
+playEvent :: App -> Snap ()
+playEvent app = do
     nstr <- maybe pass return =<< getParam "n"
     case reads (BC.unpack nstr) of
         ((n,"") : _) -> mapM_ handle [0 .. n-1]
@@ -406,15 +447,16 @@ gameEvent app = do
         dispatch False $ EventMotion (x,y)
 
     dispatch force event = do
-        k        <- fmap (read . BC.unpack) $ maybe pass return =<< getParam "key"
-        ts       <- fmap (read . BC.unpack) $ maybe pass return =<< getParam "ts"
-        (_, var) <- maybe pass return =<< liftIO (getCached (appGames app) k)
-        liftIO $ modifyMVar var $ \ (t0, prev, game) -> do
+        k   <- fmap (read . BC.unpack) $ maybe pass return =<< getParam "key"
+        ts  <- fmap (read . BC.unpack) $ maybe pass return =<< getParam "ts"
+        var <- maybe pass return =<< liftIO (getCached (appSessions app) k)
+        liftIO $ modifyMVar var $ \ (t0, prev, w) -> do
             if force || ts >= prev
-                then return ((t0, ts  , signalGame event game), ())
-                else return ((t0, prev, game                 ), ())
+                then return ((t0, ts  , signalWorld event w), ())
+                else return ((t0, prev, w                  ), ())
 
     pname s i = B.append s (BC.pack (show i))
+
 
 bsToNum :: ByteString -> Snap Float
 bsToNum bs = case reads (BC.unpack bs) of
@@ -496,4 +538,3 @@ errors app errs = do
 shareLink handler digest = return [ TextNode link ]
     where link = "/" `mappend` handler `mappend` "?digest="
             `mappend` (T.decodeUtf8 $ urlEncode $ B64.encode digest)
-

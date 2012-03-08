@@ -1,41 +1,80 @@
-{-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE Safe                      #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE Safe  #-}
 
 module GlossAdapters where
 
 import Graphics.Gloss
 import Graphics.Gloss.Interface.Simulate
 import Graphics.Gloss.Interface.Game
+import System.Random
+
+data World where
+    WPicture    :: Picture -> World
+    WAnimation  :: Float -> (Float -> Picture) -> World
+    WSimulation :: a
+                -> (Float -> a -> a)
+                -> (a -> Picture)
+                -> World
+    WGame       :: a
+                -> (Float -> a -> a)
+                -> (Event -> a -> a)
+                -> (a -> Picture)
+                -> World
 
 
-data Simulation = forall a. Simulation
-    a
-    (Float -> a -> a)
-    (a -> Picture)
+data WorldType = PictureType | AnimationType | SimulationType | GameType
+    deriving (Eq, Ord)
 
 
-advanceSimulation :: Float -> Simulation -> Simulation
-advanceSimulation dt (Simulation w s d) = Simulation (s dt w) s d
+typeOfWorld :: World -> WorldType
+typeOfWorld (WPicture    _      ) = PictureType
+typeOfWorld (WAnimation  _ _    ) = AnimationType
+typeOfWorld (WSimulation _ _ _  ) = SimulationType
+typeOfWorld (WGame       _ _ _ _) = GameType
 
 
-simulationToPicture :: Simulation -> Picture
-simulationToPicture (Simulation w s d) = d w
+drawWorld :: World -> Picture
+drawWorld (WPicture    p      ) = p
+drawWorld (WAnimation  t f    ) = f t
+drawWorld (WSimulation w s d  ) = d w
+drawWorld (WGame       w s e d) = d w
 
 
-data Game = forall a. Game
-    a
-    (Event -> a -> a)
-    (Float -> a -> a)
-    (a -> Picture)
+stepWorld :: Float -> World -> World
+stepWorld dt (WPicture    p      ) = WPicture    p
+stepWorld dt (WAnimation  t f    ) = WAnimation  (t + dt) f
+stepWorld dt (WSimulation w s d  ) = WSimulation (s dt w) s d
+stepWorld dt (WGame       w s e d) = WGame       (s dt w) s e d
 
 
-advanceGame :: Float -> Game -> Game
-advanceGame dt (Game w e s d) = Game (s dt w) e s d
+signalWorld :: Event -> World -> World
+signalWorld ev (WPicture    p      ) = WPicture    p
+signalWorld ev (WAnimation  t f    ) = WAnimation  t f
+signalWorld ev (WSimulation w s d  ) = WSimulation w s d
+signalWorld ev (WGame       w s e d) = WGame       (e ev w) s e d
 
 
-signalGame :: Event -> Game -> Game
-signalGame ev (Game w e s d) = Game (e ev w) e s d
+type CompiledWorld = StdGen -> World
 
 
-gameToPicture :: Game -> Picture
-gameToPicture (Game w e s d) = d w
+worldFromPicture :: Picture -> CompiledWorld
+worldFromPicture = const . WPicture
+
+
+worldFromAnimation :: (Float -> Picture) -> CompiledWorld
+worldFromAnimation = const . WAnimation 0
+
+
+worldFromSimulation :: (StdGen -> a)
+                    -> (Float -> a -> a)
+                    -> (a -> Picture)
+                    -> CompiledWorld
+worldFromSimulation i s d g = WSimulation (i g) s d
+
+
+worldFromGame :: (StdGen -> a)
+              -> (Float -> a -> a)
+              -> (Event -> a -> a)
+              -> (a -> Picture)
+              -> CompiledWorld
+worldFromGame i s e d g = WGame (i g) s e d

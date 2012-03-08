@@ -4,7 +4,7 @@ import Control.Concurrent.MVar
 import Data.Time
 import Data.Word
 import Graphics.Gloss
-import Snap.Types
+import Snap.Core
 import System.Random
 import Text.Templating.Heist
 
@@ -18,35 +18,20 @@ import qualified Data.ByteString.Base64 as B64
 import GlossAdapters
 import CacheMap
 
-
-type Anim        = (Err (Float  -> Picture),    UTCTime, Float -> Picture)
-type Sim         = (Err (StdGen -> Simulation), MVar (UTCTime, Simulation))
-type RunningGame = (Err (StdGen -> Game)      , MVar (UTCTime, Word64, Game))
-
-type Err a = Either [String] a
+type CompileResult = ([String], Maybe CompiledWorld)
 
 data App = App {
-    appHeist               :: TemplateState Snap,
-    appAnimations          :: CacheMap Int Anim,
-    appSimulations         :: CacheMap Int Sim,
-    appGames               :: CacheMap Int RunningGame,
-    appCompiledPictures    :: CacheMap ByteString (Err Picture),
-    appCompiledAnimations  :: CacheMap ByteString (Err (Float -> Picture)),
-    appCompiledSimulations :: CacheMap ByteString (Err (StdGen -> Simulation)),
-    appCompiledGames       :: CacheMap ByteString (Err (StdGen -> Game))
+    appHeist    :: HeistState Snap,
+    appSessions :: CacheMap Int (MVar (UTCTime, Int, World)),
+    appPrograms :: CacheMap (WorldType, ByteString) CompileResult
     }
 
 
-newApp :: TemplateState Snap -> IO App
+newApp :: HeistState Snap -> IO App
 newApp heist = do
-    animMgr     <- newCacheMap
-    simMgr      <- newCacheMap
-    gameMgr     <- newCacheMap
-    cpic        <- newCacheMap
-    canim       <- newCacheMap
-    csim        <- newCacheMap
-    cgame       <- newCacheMap
-    return (App heist animMgr simMgr gameMgr cpic canim csim cgame)
+    sessions <- newCacheMap
+    programs <- newCacheMap
+    return (App heist sessions programs)
 
 
 {-|

@@ -10,4 +10,4 @@ Cabal-version:       >=1.2
 
 Library
   Exposed-modules:   GlossAdapters
-  Build-depends:     base, gloss
+  Build-depends:     base, gloss, random
