@@ -135,7 +135,9 @@ compile expr fn = doWithErrors $ do
                             GHC.ExposePackage "gloss-web-adapters",
                             GHC.ExposePackage "random" ]
         }
-    GHC.setSessionDynFlags (GHC.dopt_set dflags' GHC.Opt_PackageTrust)
+    let dflags''  = GHC.xopt_unset dflags'  GHC.Opt_MonomorphismRestriction
+    let dflags''' = GHC.dopt_set   dflags'' GHC.Opt_PackageTrust
+    GHC.setSessionDynFlags dflags'''
     target <- GHC.guessTarget fn Nothing
     GHC.setTargets [target]
     r <- fmap GHC.succeeded (GHC.load GHC.LoadAllTargets)
