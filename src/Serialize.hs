@@ -55,29 +55,32 @@ fromPicture :: Picture -> Builder
 fromPicture Blank
     = fromWord8  1
 fromPicture (Polygon path)
-    = fromWord8  2 `mappend` fromPath path
+    = fromWord8  2 <> fromPath path
 fromPicture (Line path)
-    = fromWord8  3 `mappend` fromPath path
+    = fromWord8  3 <> fromPath path
 fromPicture (Circle r)
-    = fromWord8  4 `mappend` fromFloat r
+    = fromWord8  4 <> fromFloat r
 fromPicture (ThickCircle r w)
-    = fromWord8  5 `mappend` fromFloat r `mappend` fromFloat w
+    = fromWord8  5 <> fromFloat r <> fromFloat w
 fromPicture (Text str)
-    = fromWord8  6 `mappend` fromWord32be (fromIntegral (B.length t))
-      `mappend` fromByteString t
-  where t = T.encodeUtf8 (T.pack str)
+    = let t = T.encodeUtf8 (T.pack str)
+      in  fromWord8  6 <> fromWord32be (fromIntegral (B.length t)) <> fromByteString t
 fromPicture (Bitmap w h bmp cache)
     = fromWord8  7
 fromPicture (Color c p)
-    = fromWord8  8 `mappend` fromColor c `mappend` fromPicture p
+    = fromWord8  8 <> fromColor c <> fromPicture p
 fromPicture (Translate x y p)
-    = fromWord8  9 `mappend` fromFloat x `mappend` fromFloat y `mappend` fromPicture p
+    = fromWord8  9 <> fromFloat x <> fromFloat y <> fromPicture p
 fromPicture (Rotate r p)
-    = fromWord8 10 `mappend` fromFloat r `mappend` fromPicture p
+    = fromWord8 10 <> fromFloat r <> fromPicture p
 fromPicture (Scale x y p)
-    = fromWord8 11 `mappend` fromFloat x `mappend` fromFloat y `mappend` fromPicture p
+    = fromWord8 11 <> fromFloat x <> fromFloat y <> fromPicture p
 fromPicture (Pictures ps)
-    = fromWord8 12 `mappend` mconcat (map fromPicture ps) `mappend` fromWord8 0
+    = fromWord8 12 <> mconcat (map fromPicture ps) <> fromWord8 0
+fromPicture (Arc b e r)
+    = fromWord8 13 <> fromFloat b <> fromFloat e <> fromFloat r
+fromPicture (ThickArc b e r w)
+    = fromWord8 14 <> fromFloat b <> fromFloat e <> fromFloat r <> fromFloat w
 
 fromColor c
     = let (r,g,b,a) = rgbaOfColor c

@@ -465,6 +465,41 @@ function display(ctx, p, a, b, c, d, e, f)
 
         p.popByte(); // Discard trailing zero
     }
+    else if (tag == 13)
+    {
+        var beg = p.popFloat();
+        var end = p.popFloat();
+        var rad = p.popFloat();
+        ctx.save();
+        ctx.transform(a, b, c, d, e, f);
+        ctx.beginPath();
+        if (rad > 0) ctx.arc(0, 0, rad, beg * Math.PI / 180, end * Math.PI / 180, false);
+        ctx.restore();
+        ctx.stroke();
+    }
+    else if (tag == 14)
+    {
+        var beg = p.popFloat();
+        var end = p.popFloat();
+        var rad = p.popFloat();
+        var wid = p.popFloat();
+
+        ctx.save();
+        ctx.transform(a, b, c, d, e, f);
+        if (wid > 0) ctx.lineWidth = wid;
+        ctx.beginPath();
+        if (rad > 0) ctx.arc(0, 0, rad, beg * Math.PI / 180, end * Math.PI / 180, false);
+        if (wid > 0)
+        {
+            ctx.stroke();
+            ctx.restore();
+        }
+        else
+        {
+            ctx.restore();
+            ctx.stroke();
+        }
+    }
 }
 
 /*

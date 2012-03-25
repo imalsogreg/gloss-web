@@ -12,7 +12,7 @@ import Data.Maybe
 import Data.Monoid
 import Data.Time
 import Graphics.Gloss
-import Graphics.Gloss.Interface.Game
+import Graphics.Gloss.Interface.Pure.Game
 import Snap.Http.Server
 import Snap.Core
 import Snap.Util.FileServe

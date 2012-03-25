@@ -19,7 +19,7 @@ Executable gloss-web
   Ghc-prof-options:  -DPROFILE_SUBST -auto-all -rtsopts
   Build-depends:     aeson,
                      array,
-                     base,
+                     base >= 4.5,
                      base64-bytestring,
                      blaze-builder,
                      bytestring,
@@ -30,7 +30,7 @@ Executable gloss-web
                      filepath,
                      ghc >= 7.2,
                      ghc-paths,
-                     gloss,
+                     gloss >= 1.7,
                      gloss-web-adapters,
                      heist,
                      mtl,
