@@ -405,16 +405,14 @@ playStream app = do
         t1 <- getCurrentTime
         let interval = t1 `diffUTCTime` t0
         when (interval < targetInterval) $
-            threadDelay $ round $ 1000000 * (targetInterval - interval)
+            threadDelay (round (1000000 * (targetInterval - interval)))
         t1 <- getCurrentTime
         let dt = realToFrac (t1 `diffUTCTime` t0)
         let w' = stepWorld dt w
         let pic  = drawWorld w'
         return ((t1, prev, w'), pic)
     eventStreamPull (fmap pictureEvent source)
-  where
-    targetInterval = 0.05
-
+  where targetInterval = 0.05
 
 playEvent :: App -> Snap ()
 playEvent app = do
@@ -422,7 +420,6 @@ playEvent app = do
     case reads (BC.unpack nstr) of
         ((n,"") : _) -> mapM_ handle [0 .. n-1]
         _            -> pass
-
   where
     handle i = do
         typ <- maybe pass return =<< getParam (pname "type" i)

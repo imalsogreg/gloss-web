@@ -15,7 +15,7 @@ Cabal-version:       >=1.2
 Executable gloss-web
   Hs-source-dirs:    src
   Main-is:           Main.hs
-  Ghc-options:       -O2 -threaded -rtsopts -with-rtsopts=-N
+  Ghc-options:       -O2 -threaded -with-rtsopts=-N
   Ghc-prof-options:  -DPROFILE_SUBST -auto-all -rtsopts
   Build-depends:     aeson,
                      array,
